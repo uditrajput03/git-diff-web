@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Empty, Alert, Button, Tooltip, message } from 'antd';
 import {
   CheckCircleOutlined,
@@ -11,6 +11,7 @@ import {
   type InlineSpan,
   type DiffLine,
   type SplitDiffRow,
+  type SplitDiffSide,
 } from '../utils/diff';
 
 interface DiffOutputProps {
@@ -25,6 +26,17 @@ interface DiffOutputProps {
 const FOLD_THRESHOLD = 8;
 const CONTEXT_LINES = 3;
 
+// Keywords for lightweight syntax highlighting
+const KEYWORDS = new Set([
+  'function', 'return', 'if', 'else', 'for', 'while', 'const', 'let', 'var',
+  'import', 'from', 'export', 'default', 'class', 'interface', 'type', 'extends',
+  'implements', 'new', 'this', 'typeof', 'instanceof', 'async', 'await', 'try',
+  'catch', 'finally', 'throw', 'switch', 'case', 'break', 'continue', 'def',
+  'self', 'elif', 'print', 'select', 'where', 'insert', 'update', 'delete',
+]);
+
+const LITERALS = new Set(['true', 'false', 'null', 'undefined', 'None', 'True', 'False']);
+
 export function DiffOutput({
   diff,
   viewMode,
@@ -33,35 +45,11 @@ export function DiffOutput({
   searchQuery,
   isDarkMode,
 }: DiffOutputProps) {
-  // Set of expanded hunk group indices
   const [expandedHunks, setExpandedHunks] = useState<Record<string, boolean>>({});
 
-  // Reset expanded hunks when foldUnchanged or diff changes
   useEffect(() => {
     setExpandedHunks({});
   }, [foldUnchanged, diff]);
-
-  // Synchronized scrolling refs for Split View
-  const leftScrollRef = useRef<HTMLDivElement>(null);
-  const rightScrollRef = useRef<HTMLDivElement>(null);
-  const isSyncingScroll = useRef<boolean>(false);
-
-  const handleScroll = (source: 'left' | 'right') => {
-    if (isSyncingScroll.current) return;
-    isSyncingScroll.current = true;
-
-    const sourceEl = source === 'left' ? leftScrollRef.current : rightScrollRef.current;
-    const targetEl = source === 'left' ? rightScrollRef.current : leftScrollRef.current;
-
-    if (sourceEl && targetEl) {
-      targetEl.scrollTop = sourceEl.scrollTop;
-      targetEl.scrollLeft = sourceEl.scrollLeft;
-    }
-
-    requestAnimationFrame(() => {
-      isSyncingScroll.current = false;
-    });
-  };
 
   const copyLine = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -69,31 +57,80 @@ export function DiffOutput({
       .catch(() => message.error('Failed to copy line'));
   };
 
-  // Render text with search highlighting
-  const renderHighlightedContent = (text: string) => {
-    if (!searchQuery.trim() || !text) {
-      return text;
-    }
+  // Syntax highlighting + search match highlighter
+  const renderTokenizedText = (text: string) => {
+    if (!text) return ' ';
 
-    const query = searchQuery.trim();
-    const regex = new RegExp(`(${query.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi');
-    const parts = text.split(regex);
+    // Split on whitespace, punctuation, strings, comments
+    const tokenRegex = /(\/\/[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b\d+(?:\.\d+)?\b|\b[a-zA-Z_$][a-zA-Z0-9_$]*\b|[^\s\w]+|\s+)/g;
+    const tokens = text.match(tokenRegex) || [text];
 
-    return parts.map((part, index) =>
-      regex.test(part) ? (
-        <mark key={index} className="diff-search-highlight">
-          {part}
-        </mark>
-      ) : (
-        part
-      )
-    );
+    return tokens.map((tok, i) => {
+      // Check search query match
+      if (searchQuery.trim() && tok.toLowerCase().includes(searchQuery.trim().toLowerCase())) {
+        const query = searchQuery.trim();
+        const regex = new RegExp(`(${query.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi');
+        const parts = tok.split(regex);
+        return (
+          <span key={i}>
+            {parts.map((part, pIdx) =>
+              regex.test(part) ? (
+                <mark key={pIdx} className="diff-search-highlight">
+                  {part}
+                </mark>
+              ) : (
+                part
+              )
+            )}
+          </span>
+        );
+      }
+
+      // Syntax token styling
+      if (tok.startsWith('//') || tok.startsWith('#')) {
+        return (
+          <span key={i} style={{ color: isDarkMode ? '#8b949e' : '#6e7781', fontStyle: 'italic' }}>
+            {tok}
+          </span>
+        );
+      }
+      if ((tok.startsWith('"') && tok.endsWith('"')) || (tok.startsWith("'") && tok.endsWith("'")) || (tok.startsWith('`') && tok.endsWith('`'))) {
+        return (
+          <span key={i} style={{ color: isDarkMode ? '#a5d6ff' : '#0a3069' }}>
+            {tok}
+          </span>
+        );
+      }
+      if (/^\d+(\.\d+)?$/.test(tok)) {
+        return (
+          <span key={i} style={{ color: isDarkMode ? '#79c0ff' : '#0550ae' }}>
+            {tok}
+          </span>
+        );
+      }
+      if (KEYWORDS.has(tok)) {
+        return (
+          <span key={i} style={{ color: isDarkMode ? '#ff7b72' : '#cf222e', fontWeight: 600 }}>
+            {tok}
+          </span>
+        );
+      }
+      if (LITERALS.has(tok)) {
+        return (
+          <span key={i} style={{ color: isDarkMode ? '#ffa657' : '#953800', fontWeight: 600 }}>
+            {tok}
+          </span>
+        );
+      }
+
+      return <span key={i}>{tok}</span>;
+    });
   };
 
-  // Render inline spans (word/char level diff)
+  // Render spans (intra-line word differences)
   const renderSpans = (spans?: InlineSpan[], fallbackContent?: string | null) => {
     if (!spans || spans.length === 0) {
-      return renderHighlightedContent(fallbackContent || ' ');
+      return renderTokenizedText(fallbackContent || ' ');
     }
 
     return spans.map((span, idx) => {
@@ -103,16 +140,12 @@ export function DiffOutput({
             key={idx}
             className="rounded px-0.5 font-bold"
             style={{
-              backgroundColor: isDarkMode
-                ? 'rgba(46, 160, 67, 0.45)'
-                : '#abf2bc',
+              backgroundColor: isDarkMode ? 'rgba(46, 160, 67, 0.45)' : '#abf2bc',
               color: isDarkMode ? '#aff5b4' : '#116329',
-              border: isDarkMode
-                ? '1px solid rgba(63, 185, 80, 0.5)'
-                : '1px solid #7ee787',
+              border: isDarkMode ? '1px solid rgba(63, 185, 80, 0.5)' : '1px solid #7ee787',
             }}
           >
-            {renderHighlightedContent(span.text)}
+            {renderTokenizedText(span.text)}
           </span>
         );
       }
@@ -122,25 +155,21 @@ export function DiffOutput({
             key={idx}
             className="rounded px-0.5 font-bold line-through"
             style={{
-              backgroundColor: isDarkMode
-                ? 'rgba(248, 81, 73, 0.45)'
-                : '#ffc1c0',
+              backgroundColor: isDarkMode ? 'rgba(248, 81, 73, 0.45)' : '#ffc1c0',
               color: isDarkMode ? '#ffdcd7' : '#82071e',
-              border: isDarkMode
-                ? '1px solid rgba(248, 81, 73, 0.5)'
-                : '1px solid #ff7b72',
+              border: isDarkMode ? '1px solid rgba(248, 81, 73, 0.5)' : '1px solid #ff7b72',
             }}
           >
-            {renderHighlightedContent(span.text)}
+            {renderTokenizedText(span.text)}
           </span>
         );
       }
-      return <span key={idx}>{renderHighlightedContent(span.text)}</span>;
+      return <span key={idx}>{renderTokenizedText(span.text)}</span>;
     });
   };
 
-  // Style helpers
-  const getLineStyle = (type: DiffType): React.CSSProperties => {
+  // Cell styles
+  const getLineStyle = (type: DiffType | 'empty'): React.CSSProperties => {
     if (type === 'added') {
       return {
         backgroundColor: isDarkMode ? 'rgba(46, 160, 67, 0.16)' : '#e6ffed',
@@ -153,13 +182,21 @@ export function DiffOutput({
         color: isDarkMode ? '#e6edf3' : '#1f2328',
       };
     }
+    if (type === 'empty') {
+      return {
+        backgroundColor: isDarkMode ? '#161b22' : '#f6f8fa',
+        backgroundImage: isDarkMode
+          ? 'repeating-linear-gradient(45deg, rgba(255,255,255,0.02), rgba(255,255,255,0.02) 8px, transparent 8px, transparent 16px)'
+          : 'repeating-linear-gradient(45deg, rgba(0,0,0,0.03), rgba(0,0,0,0.03) 8px, transparent 8px, transparent 16px)',
+      };
+    }
     return {
       backgroundColor: 'transparent',
       color: isDarkMode ? '#c9d1d9' : '#24292f',
     };
   };
 
-  const getGutterStyle = (type: DiffType): React.CSSProperties => {
+  const getGutterStyle = (type: DiffType | 'empty'): React.CSSProperties => {
     if (type === 'added') {
       return {
         backgroundColor: isDarkMode ? 'rgba(46, 160, 67, 0.28)' : '#dafbe1',
@@ -174,6 +211,12 @@ export function DiffOutput({
         borderRight: isDarkMode ? '1px solid rgba(248, 81, 73, 0.3)' : '1px solid #ffc1c0',
       };
     }
+    if (type === 'empty') {
+      return {
+        backgroundColor: isDarkMode ? '#161b22' : '#f6f8fa',
+        borderRight: isDarkMode ? '1px solid #30363d' : '1px solid #d0d7de',
+      };
+    }
     return {
       backgroundColor: isDarkMode ? '#1f1f1f' : '#f6f8fa',
       color: isDarkMode ? '#6e7681' : '#8c959f',
@@ -181,7 +224,7 @@ export function DiffOutput({
     };
   };
 
-  const getPrefix = (type: DiffType) => {
+  const getPrefix = (type: DiffType | 'empty') => {
     if (type === 'added') return '+';
     if (type === 'removed') return '-';
     return ' ';
@@ -204,19 +247,15 @@ export function DiffOutput({
         result.push({ isHunk: false, line: diff.unified[i] });
         i++;
       } else {
-        // Find run of unchanged lines
         let j = i;
         while (j < diff.unified.length && diff.unified[j].type === 'unchanged') {
           j++;
         }
         const runLength = j - i;
         if (runLength > FOLD_THRESHOLD) {
-          // Keep top context lines
           for (let k = 0; k < CONTEXT_LINES; k++) {
             result.push({ isHunk: false, line: diff.unified[i + k] });
           }
-
-          // Fold middle lines
           const foldedLines = diff.unified.slice(i + CONTEXT_LINES, j - CONTEXT_LINES);
           const hunkId = `unified-hunk-${i}`;
           result.push({
@@ -225,8 +264,6 @@ export function DiffOutput({
             count: foldedLines.length,
             lines: foldedLines,
           });
-
-          // Keep bottom context lines
           for (let k = j - CONTEXT_LINES; k < j; k++) {
             result.push({ isHunk: false, line: diff.unified[k] });
           }
@@ -255,8 +292,8 @@ export function DiffOutput({
     let i = 0;
     while (i < diff.split.length) {
       const isUnchanged =
-        diff.split[i].left?.type === 'unchanged' &&
-        diff.split[i].right?.type === 'unchanged';
+        diff.split[i].left.type === 'unchanged' &&
+        diff.split[i].right.type === 'unchanged';
 
       if (!isUnchanged) {
         result.push({ isHunk: false, row: diff.split[i] });
@@ -265,8 +302,8 @@ export function DiffOutput({
         let j = i;
         while (
           j < diff.split.length &&
-          diff.split[j].left?.type === 'unchanged' &&
-          diff.split[j].right?.type === 'unchanged'
+          diff.split[j].left.type === 'unchanged' &&
+          diff.split[j].right.type === 'unchanged'
         ) {
           j++;
         }
@@ -297,7 +334,6 @@ export function DiffOutput({
     return result;
   }, [diff.split, foldUnchanged]);
 
-  // If no lines at all
   if (diff.unified.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center p-8">
@@ -309,11 +345,74 @@ export function DiffOutput({
     );
   }
 
-  // If files are identical
   const isIdentical =
     diff.metrics.additions === 0 &&
     diff.metrics.deletions === 0 &&
     diff.metrics.unchanged > 0;
+
+  const renderSideCells = (side: SplitDiffSide, isLeft: boolean) => {
+    if (side.isPlaceholder) {
+      return (
+        <>
+          <td
+            className="w-12 min-w-[3rem] px-2 text-right select-none"
+            style={getGutterStyle('empty')}
+          />
+          <td
+            className="w-6 px-2 text-center select-none"
+            style={getGutterStyle('empty')}
+          />
+          <td
+            className="px-3 py-0.5 select-none"
+            style={getLineStyle('empty')}
+          />
+        </>
+      );
+    }
+
+    return (
+      <>
+        <td
+          className="w-12 min-w-[3rem] px-2 text-right select-none"
+          style={getGutterStyle(side.type)}
+        >
+          {side.lineNumber}
+        </td>
+        <td
+          className="w-6 px-2 text-center select-none font-bold opacity-75"
+          style={getLineStyle(side.type)}
+        >
+          {getPrefix(side.type)}
+        </td>
+        <td
+          className={`px-3 py-0.5 relative group ${
+            isLeft ? 'border-r' : ''
+          }`}
+          style={{
+            ...getLineStyle(side.type),
+            borderColor: isDarkMode ? '#30363d' : '#d0d7de',
+          }}
+        >
+          {renderSpans(side.spans, side.content)}
+          {side.content && (
+            <Tooltip title="Copy line">
+              <button
+                type="button"
+                onClick={() => copyLine(side.content!)}
+                className="hidden group-hover:inline-flex absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded opacity-60 hover:opacity-100 transition-opacity"
+                style={{
+                  backgroundColor: isDarkMode ? '#21262d' : '#ffffff',
+                  border: isDarkMode ? '1px solid #30363d' : '1px solid #d0d7de',
+                }}
+              >
+                <CopyOutlined style={{ fontSize: '11px' }} />
+              </button>
+            </Tooltip>
+          )}
+        </td>
+      </>
+    );
+  };
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-4 pb-3">
@@ -332,7 +431,7 @@ export function DiffOutput({
 
       {/* Diff Table Container */}
       <div
-        className="flex-1 border rounded-lg overflow-hidden shadow-sm flex flex-col min-h-0 diff-code-font"
+        className="flex-1 border rounded-lg overflow-auto shadow-sm flex flex-col min-h-0 diff-code-font"
         style={{
           backgroundColor: isDarkMode ? '#0d1117' : '#ffffff',
           borderColor: isDarkMode ? '#30363d' : '#d0d7de',
@@ -443,19 +542,21 @@ export function DiffOutput({
                       </td>
                       <td className="px-3 py-0.5 relative group">
                         {renderSpans(line.spans, line.content)}
-                        <Tooltip title="Copy line">
-                          <button
-                            type="button"
-                            onClick={() => copyLine(line.content)}
-                            className="hidden group-hover:inline-flex absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded opacity-60 hover:opacity-100 transition-opacity"
-                            style={{
-                              backgroundColor: isDarkMode ? '#21262d' : '#ffffff',
-                              border: isDarkMode ? '1px solid #30363d' : '1px solid #d0d7de',
-                            }}
-                          >
-                            <CopyOutlined style={{ fontSize: '11px' }} />
-                          </button>
-                        </Tooltip>
+                        {line.content && (
+                          <Tooltip title="Copy line">
+                            <button
+                              type="button"
+                              onClick={() => copyLine(line.content)}
+                              className="hidden group-hover:inline-flex absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded opacity-60 hover:opacity-100 transition-opacity"
+                              style={{
+                                backgroundColor: isDarkMode ? '#21262d' : '#ffffff',
+                                border: isDarkMode ? '1px solid #30363d' : '1px solid #d0d7de',
+                              }}
+                            >
+                              <CopyOutlined style={{ fontSize: '11px' }} />
+                            </button>
+                          </Tooltip>
+                        )}
                       </td>
                     </tr>
                   );
@@ -464,214 +565,70 @@ export function DiffOutput({
             </table>
           </div>
         ) : (
-          /* SPLIT VIEW WITH SYNCHRONIZED SCROLL */
-          <div className="flex-1 flex overflow-hidden">
-            {/* Left Pane (Original) */}
-            <div
-              ref={leftScrollRef}
-              onScroll={() => handleScroll('left')}
-              className="w-1/2 overflow-auto border-r"
-              style={{ borderColor: isDarkMode ? '#30363d' : '#d0d7de' }}
+          /* SPLIT VIEW - SINGLE UNIFIED TABLE (100% Locked Line Alignment) */
+          <div className="flex-1 overflow-auto">
+            <table
+              className={`w-full border-collapse ${
+                wordWrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
+              }`}
             >
-              <table
-                className={`w-full border-collapse ${
-                  wordWrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
-                }`}
-              >
-                <tbody>
-                  {processedSplitItems.map((item, index) => {
-                    if (item.isHunk) {
-                      const isExpanded = expandedHunks[item.id];
-                      if (isExpanded) {
-                        return item.rows.map((row) => (
-                          <tr
-                            key={row.id}
-                            style={getLineStyle(row.left ? row.left.type : 'unchanged')}
-                          >
-                            <td
-                              className="w-12 min-w-[3rem] px-2 text-right select-none"
-                              style={getGutterStyle(row.left ? row.left.type : 'unchanged')}
-                            >
-                              {row.left?.lineNumber}
-                            </td>
-                            <td
-                              className="w-6 px-2 text-center select-none font-bold opacity-75"
-                              style={getLineStyle(row.left ? row.left.type : 'unchanged')}
-                            >
-                              {row.left ? getPrefix(row.left.type) : ' '}
-                            </td>
-                            <td className="px-3 py-0.5">
-                              {renderSpans(row.left?.spans, row.left?.content)}
-                            </td>
-                          </tr>
-                        ));
-                      }
-                      return (
-                        <tr
-                          key={item.id}
-                          style={{
-                            backgroundColor: isDarkMode
-                              ? 'rgba(56, 139, 253, 0.15)'
-                              : '#f1f8ff',
-                          }}
-                        >
-                          <td
-                            colSpan={3}
-                            className="py-1.5 px-4 text-xs font-semibold text-center select-none border-y"
-                            style={{
-                              borderColor: isDarkMode ? '#30363d' : '#c8e1ff',
-                              color: isDarkMode ? '#58a6ff' : '#0969da',
-                            }}
-                          >
-                            <Button
-                              type="link"
-                              size="small"
-                              icon={<DownOutlined />}
-                              onClick={() =>
-                                setExpandedHunks((prev) => ({
-                                  ...prev,
-                                  [item.id]: true,
-                                }))
-                              }
-                            >
-                              Expand {item.count} lines
-                            </Button>
-                          </td>
+              <tbody>
+                {processedSplitItems.map((item, index) => {
+                  if (item.isHunk) {
+                    const isExpanded = expandedHunks[item.id];
+                    if (isExpanded) {
+                      return item.rows.map((row) => (
+                        <tr key={row.id} className="hover:opacity-95 transition-opacity">
+                          {renderSideCells(row.left, true)}
+                          {renderSideCells(row.right, false)}
                         </tr>
-                      );
+                      ));
                     }
-
-                    const row = item.row;
-                    const left = row.left;
                     return (
                       <tr
-                        key={row.id || index}
-                        style={getLineStyle(left ? left.type : 'unchanged')}
+                        key={item.id}
+                        style={{
+                          backgroundColor: isDarkMode
+                            ? 'rgba(56, 139, 253, 0.15)'
+                            : '#f1f8ff',
+                        }}
                       >
                         <td
-                          className="w-12 min-w-[3rem] px-2 text-right select-none"
-                          style={getGutterStyle(left ? left.type : 'unchanged')}
+                          colSpan={6}
+                          className="py-1.5 px-4 text-xs font-semibold text-center select-none border-y"
+                          style={{
+                            borderColor: isDarkMode ? '#30363d' : '#c8e1ff',
+                            color: isDarkMode ? '#58a6ff' : '#0969da',
+                          }}
                         >
-                          {left?.lineNumber}
-                        </td>
-                        <td
-                          className="w-6 px-2 text-center select-none font-bold opacity-75"
-                          style={getLineStyle(left ? left.type : 'unchanged')}
-                        >
-                          {left ? getPrefix(left.type) : ' '}
-                        </td>
-                        <td className="px-3 py-0.5 relative group">
-                          {renderSpans(left?.spans, left?.content)}
+                          <Button
+                            type="link"
+                            size="small"
+                            icon={<DownOutlined />}
+                            onClick={() =>
+                              setExpandedHunks((prev) => ({
+                                ...prev,
+                                [item.id]: true,
+                              }))
+                            }
+                          >
+                            Expand {item.count} unchanged lines
+                          </Button>
                         </td>
                       </tr>
                     );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                  }
 
-            {/* Right Pane (Modified) */}
-            <div
-              ref={rightScrollRef}
-              onScroll={() => handleScroll('right')}
-              className="w-1/2 overflow-auto"
-            >
-              <table
-                className={`w-full border-collapse ${
-                  wordWrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
-                }`}
-              >
-                <tbody>
-                  {processedSplitItems.map((item, index) => {
-                    if (item.isHunk) {
-                      const isExpanded = expandedHunks[item.id];
-                      if (isExpanded) {
-                        return item.rows.map((row) => (
-                          <tr
-                            key={row.id}
-                            style={getLineStyle(row.right ? row.right.type : 'unchanged')}
-                          >
-                            <td
-                              className="w-12 min-w-[3rem] px-2 text-right select-none"
-                              style={getGutterStyle(row.right ? row.right.type : 'unchanged')}
-                            >
-                              {row.right?.lineNumber}
-                            </td>
-                            <td
-                              className="w-6 px-2 text-center select-none font-bold opacity-75"
-                              style={getLineStyle(row.right ? row.right.type : 'unchanged')}
-                            >
-                              {row.right ? getPrefix(row.right.type) : ' '}
-                            </td>
-                            <td className="px-3 py-0.5">
-                              {renderSpans(row.right?.spans, row.right?.content)}
-                            </td>
-                          </tr>
-                        ));
-                      }
-                      return (
-                        <tr
-                          key={item.id}
-                          style={{
-                            backgroundColor: isDarkMode
-                              ? 'rgba(56, 139, 253, 0.15)'
-                              : '#f1f8ff',
-                          }}
-                        >
-                          <td
-                            colSpan={3}
-                            className="py-1.5 px-4 text-xs font-semibold text-center select-none border-y"
-                            style={{
-                              borderColor: isDarkMode ? '#30363d' : '#c8e1ff',
-                              color: isDarkMode ? '#58a6ff' : '#0969da',
-                            }}
-                          >
-                            <Button
-                              type="link"
-                              size="small"
-                              icon={<DownOutlined />}
-                              onClick={() =>
-                                setExpandedHunks((prev) => ({
-                                  ...prev,
-                                  [item.id]: true,
-                                }))
-                              }
-                            >
-                              Expand {item.count} lines
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    }
-
-                    const row = item.row;
-                    const right = row.right;
-                    return (
-                      <tr
-                        key={row.id || index}
-                        style={getLineStyle(right ? right.type : 'unchanged')}
-                      >
-                        <td
-                          className="w-12 min-w-[3rem] px-2 text-right select-none"
-                          style={getGutterStyle(right ? right.type : 'unchanged')}
-                        >
-                          {right?.lineNumber}
-                        </td>
-                        <td
-                          className="w-6 px-2 text-center select-none font-bold opacity-75"
-                          style={getLineStyle(right ? right.type : 'unchanged')}
-                        >
-                          {right ? getPrefix(right.type) : ' '}
-                        </td>
-                        <td className="px-3 py-0.5 relative group">
-                          {renderSpans(right?.spans, right?.content)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                  const row = item.row;
+                  return (
+                    <tr key={row.id || index} className="hover:opacity-95 transition-opacity">
+                      {renderSideCells(row.left, true)}
+                      {renderSideCells(row.right, false)}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

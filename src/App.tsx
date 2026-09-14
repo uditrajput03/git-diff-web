@@ -1,14 +1,20 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { ConfigProvider, theme, message, App as AntdApp } from 'antd';
 import { Header } from './components/Header';
-import { Toolbar } from './components/Toolbar';
+import { Toolbar, type DiffEngine } from './components/Toolbar';
 import { Inputs } from './components/Inputs';
 import { DiffOutput } from './components/DiffOutput';
+import { MonacoDiffViewer } from './components/MonacoDiffViewer';
 import { HelpModal } from './components/HelpModal';
-import { computeDiff, downloadFile, type DiffResult, type Granularity } from './utils/diff';
+import {
+  computeDiff,
+  downloadFile,
+  detectLanguage,
+  type DiffResult,
+  type Granularity,
+} from './utils/diff';
 import { DIFF_SAMPLES, type DiffSample } from './utils/samples';
 
-// Helper to retrieve initial stored values safely
 const getSaved = (key: string, defaultVal: string) => {
   try {
     return localStorage.getItem(key) ?? defaultVal;
@@ -36,8 +42,15 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
     getSaved('gdw_modified_fn', DIFF_SAMPLES[0].modifiedFilename)
   );
 
+  const [diffEngine, setDiffEngine] = useState<DiffEngine>(() =>
+    (getSaved('gdw_diff_engine', 'monaco') as DiffEngine)
+  );
+  const [language, setLanguage] = useState<string>(() =>
+    getSaved('gdw_language', DIFF_SAMPLES[0].language)
+  );
+
   const [viewMode, setViewMode] = useState<'split' | 'unified'>(() =>
-    (getSaved('gdw_view_mode', 'unified') as 'split' | 'unified')
+    (getSaved('gdw_view_mode', 'split') as 'split' | 'unified')
   );
   const [granularity, setGranularity] = useState<Granularity>(() =>
     (getSaved('gdw_granularity', 'word') as Granularity)
@@ -56,20 +69,28 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
     getSaved('gdw_fold_unchanged', 'false') === 'true'
   );
   const [showInputs, setShowInputs] = useState<boolean>(() =>
-    getSaved('gdw_show_inputs', 'true') === 'true'
+    getSaved('gdw_show_inputs', 'false') === 'true'
   );
 
   const [searchQuery, setSearchQuery] = useState('');
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
 
-  // Save changes to localStorage
+  // Reference for Monaco diff hunk navigation
+  const monacoNavRef = useRef<{
+    nextDiff: () => void;
+    prevDiff: () => void;
+  } | null>(null);
+
+  // Persistence
   useEffect(() => {
     try {
       localStorage.setItem('gdw_original', originalText);
       localStorage.setItem('gdw_modified', modifiedText);
       localStorage.setItem('gdw_original_fn', originalFilename);
       localStorage.setItem('gdw_modified_fn', modifiedFilename);
+      localStorage.setItem('gdw_diff_engine', diffEngine);
+      localStorage.setItem('gdw_language', language);
       localStorage.setItem('gdw_view_mode', viewMode);
       localStorage.setItem('gdw_granularity', granularity);
       localStorage.setItem('gdw_ignore_ws', String(ignoreWhitespace));
@@ -78,13 +99,15 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
       localStorage.setItem('gdw_fold_unchanged', String(foldUnchanged));
       localStorage.setItem('gdw_show_inputs', String(showInputs));
     } catch {
-      // Ignore quota/private mode errors
+      // Ignore quota errors
     }
   }, [
     originalText,
     modifiedText,
     originalFilename,
     modifiedFilename,
+    diffEngine,
+    language,
     viewMode,
     granularity,
     ignoreWhitespace,
@@ -114,7 +137,7 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
     });
   }, [debouncedOriginal, debouncedModified, ignoreWhitespace, ignoreCase, granularity]);
 
-  // Search matches count in diff
+  // Search match count
   const searchMatchCount = useMemo(() => {
     if (!searchQuery.trim()) return 0;
     const q = searchQuery.trim().toLowerCase();
@@ -140,6 +163,22 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
     setCurrentMatchIndex((prev) => (prev - 1 + searchMatchCount) % searchMatchCount);
   };
 
+  const handleNextDiffHunk = () => {
+    if (diffEngine === 'monaco' && monacoNavRef.current) {
+      monacoNavRef.current.nextDiff();
+    } else {
+      handleNextMatch();
+    }
+  };
+
+  const handlePrevDiffHunk = () => {
+    if (diffEngine === 'monaco' && monacoNavRef.current) {
+      monacoNavRef.current.prevDiff();
+    } else {
+      handlePrevMatch();
+    }
+  };
+
   const handleSwap = useCallback(() => {
     setOriginalText(modifiedText);
     setModifiedText(originalText);
@@ -161,8 +200,25 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
     setModifiedText(sample.modified);
     setOriginalFilename(sample.originalFilename);
     setModifiedFilename(sample.modifiedFilename);
+    setLanguage(sample.language);
     message.success(`Loaded sample: ${sample.name}`);
   }, []);
+
+  const handleOriginalFilenameChange = (name: string) => {
+    setOriginalFilename(name);
+    const detected = detectLanguage(name);
+    if (detected !== 'plaintext') {
+      setLanguage(detected);
+    }
+  };
+
+  const handleModifiedFilenameChange = (name: string) => {
+    setModifiedFilename(name);
+    const detected = detectLanguage(name);
+    if (detected !== 'plaintext') {
+      setLanguage(detected);
+    }
+  };
 
   const handleCopyPatch = useCallback(() => {
     if (!diffResult.patch) {
@@ -204,6 +260,14 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
         e.preventDefault();
         setViewMode((prev) => (prev === 'split' ? 'unified' : 'split'));
       }
+      if (e.key === 'F7') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handlePrevDiffHunk();
+        } else {
+          handleNextDiffHunk();
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -224,6 +288,10 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
       />
 
       <Toolbar
+        diffEngine={diffEngine}
+        setDiffEngine={setDiffEngine}
+        language={language}
+        setLanguage={setLanguage}
         viewMode={viewMode}
         setViewMode={setViewMode}
         granularity={granularity}
@@ -244,6 +312,8 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
         currentMatchIndex={currentMatchIndex}
         onNextMatch={handleNextMatch}
         onPrevMatch={handlePrevMatch}
+        onNextDiffHunk={handleNextDiffHunk}
+        onPrevDiffHunk={handlePrevDiffHunk}
         onSelectSample={handleSelectSample}
         onSwap={handleSwap}
         onClear={handleClear}
@@ -256,22 +326,44 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
           originalText={originalText}
           setOriginalText={setOriginalText}
           originalFilename={originalFilename}
-          setOriginalFilename={setOriginalFilename}
+          setOriginalFilename={handleOriginalFilenameChange}
           modifiedText={modifiedText}
           setModifiedText={setModifiedText}
           modifiedFilename={modifiedFilename}
-          setModifiedFilename={setModifiedFilename}
+          setModifiedFilename={handleModifiedFilenameChange}
           showInputs={showInputs}
         />
 
-        <DiffOutput
-          diff={diffResult}
-          viewMode={viewMode}
-          wordWrap={wordWrap}
-          foldUnchanged={foldUnchanged}
-          searchQuery={searchQuery}
-          isDarkMode={isDarkMode}
-        />
+        {diffEngine === 'monaco' ? (
+          <div className="flex-1 w-full h-full min-h-0 p-3 pt-1">
+            <div
+              className="w-full h-full rounded-lg overflow-hidden border shadow-sm"
+              style={{ borderColor: isDarkMode ? '#30363d' : '#d0d7de' }}
+            >
+              <MonacoDiffViewer
+                originalText={originalText}
+                modifiedText={modifiedText}
+                onOriginalChange={setOriginalText}
+                onModifiedChange={setModifiedText}
+                language={language}
+                viewMode={viewMode}
+                ignoreWhitespace={ignoreWhitespace}
+                wordWrap={wordWrap}
+                isDarkMode={isDarkMode}
+                navRef={monacoNavRef}
+              />
+            </div>
+          </div>
+        ) : (
+          <DiffOutput
+            diff={diffResult}
+            viewMode={viewMode}
+            wordWrap={wordWrap}
+            foldUnchanged={foldUnchanged}
+            searchQuery={searchQuery}
+            isDarkMode={isDarkMode}
+          />
+        )}
       </div>
 
       <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
@@ -294,7 +386,7 @@ export default function App() {
     try {
       localStorage.setItem('gdw_dark_mode', String(isDarkMode));
     } catch {
-      // Ignore quota/private mode errors
+      // Ignore quota errors
     }
   }, [isDarkMode]);
 

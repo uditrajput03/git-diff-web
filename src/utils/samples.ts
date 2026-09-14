@@ -3,6 +3,7 @@ export interface DiffSample {
   name: string;
   category: string;
   description: string;
+  language: string;
   originalFilename: string;
   modifiedFilename: string;
   original: string;
@@ -15,6 +16,7 @@ export const DIFF_SAMPLES: DiffSample[] = [
     name: 'TypeScript Refactor',
     category: 'Code',
     description: 'Refactoring checkout cart calculator with TypeScript types and discount tiers',
+    language: 'typescript',
     originalFilename: 'cart-service.ts (Before)',
     modifiedFilename: 'cart-service.ts (After)',
     original: `interface CartItem {
@@ -94,6 +96,7 @@ export function formatPrice(amount: number, locale = 'en-US'): string {
     name: 'JSON API Config',
     category: 'Config',
     description: 'Upgrading cloud service endpoints, rate limits, and feature toggles in JSON',
+    language: 'json',
     originalFilename: 'app-config.v1.json',
     modifiedFilename: 'app-config.v2.json',
     original: `{
@@ -147,6 +150,7 @@ export function formatPrice(amount: number, locale = 'en-US'): string {
     name: 'Python Cache Refactor',
     category: 'Code',
     description: 'Adding LRU caching, type hints, and exception logging in Python',
+    language: 'python',
     originalFilename: 'user_repository.py (Old)',
     modifiedFilename: 'user_repository.py (New)',
     original: `import json
@@ -210,6 +214,7 @@ class UserRepository:
     name: 'Markdown Documentation',
     category: 'Docs',
     description: 'Documentation change updating API setup instructions and prerequisites',
+    language: 'markdown',
     originalFilename: 'README.md (v1.0)',
     modifiedFilename: 'README.md (v2.0)',
     original: `# My Project

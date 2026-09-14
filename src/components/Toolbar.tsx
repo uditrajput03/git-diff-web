@@ -7,6 +7,7 @@ import {
   Space,
   Input,
   Popconfirm,
+  Select,
   type MenuProps,
 } from 'antd';
 import {
@@ -22,11 +23,36 @@ import {
   DownOutlined,
   EyeInvisibleOutlined,
   EyeOutlined,
+  CodeOutlined,
+  GithubOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,
 } from '@ant-design/icons';
 import { type Granularity } from '../utils/diff';
 import { DIFF_SAMPLES, type DiffSample } from '../utils/samples';
 
+export type DiffEngine = 'monaco' | 'github';
+
+const SUPPORTED_LANGUAGES = [
+  { label: 'TypeScript', value: 'typescript' },
+  { label: 'JavaScript', value: 'javascript' },
+  { label: 'JSON', value: 'json' },
+  { label: 'Python', value: 'python' },
+  { label: 'Markdown', value: 'markdown' },
+  { label: 'HTML', value: 'html' },
+  { label: 'CSS', value: 'css' },
+  { label: 'SQL', value: 'sql' },
+  { label: 'Shell / Bash', value: 'shell' },
+  { label: 'Rust', value: 'rust' },
+  { label: 'Go', value: 'go' },
+  { label: 'Plain Text', value: 'plaintext' },
+];
+
 interface ToolbarProps {
+  diffEngine: DiffEngine;
+  setDiffEngine: (engine: DiffEngine) => void;
+  language: string;
+  setLanguage: (lang: string) => void;
   viewMode: 'split' | 'unified';
   setViewMode: (mode: 'split' | 'unified') => void;
   granularity: Granularity;
@@ -47,6 +73,8 @@ interface ToolbarProps {
   currentMatchIndex: number;
   onNextMatch: () => void;
   onPrevMatch: () => void;
+  onNextDiffHunk: () => void;
+  onPrevDiffHunk: () => void;
   onSelectSample: (sample: DiffSample) => void;
   onSwap: () => void;
   onClear: () => void;
@@ -55,6 +83,10 @@ interface ToolbarProps {
 }
 
 export function Toolbar({
+  diffEngine,
+  setDiffEngine,
+  language,
+  setLanguage,
   viewMode,
   setViewMode,
   granularity,
@@ -75,13 +107,14 @@ export function Toolbar({
   currentMatchIndex,
   onNextMatch,
   onPrevMatch,
+  onNextDiffHunk,
+  onPrevDiffHunk,
   onSelectSample,
   onSwap,
   onClear,
   onCopyPatch,
   onExportPatch,
 }: ToolbarProps) {
-  // Build Samples Dropdown Menu
   const sampleMenuItems: MenuProps['items'] = DIFF_SAMPLES.map((sample) => ({
     key: sample.id,
     label: (
@@ -94,37 +127,83 @@ export function Toolbar({
   }));
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-b select-none transition-colors">
-      {/* Left side: View Mode & Granularity & Options */}
-      <div className="flex flex-wrap items-center gap-3">
-        {/* View Mode */}
+    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 border-b select-none transition-colors">
+      {/* Left section: Diff Engine, View Mode, Language, Toggles */}
+      <div className="flex flex-wrap items-center gap-2.5">
+        {/* Diff Engine Selector: VS Code vs GitHub */}
+        <Tooltip title="Choose between the real VS Code Monaco diff editor or GitHub Web PR table view">
+          <Segmented<DiffEngine>
+            value={diffEngine}
+            onChange={(val) => setDiffEngine(val)}
+            options={[
+              {
+                label: 'VS Code Diff',
+                value: 'monaco',
+                icon: <CodeOutlined />,
+              },
+              {
+                label: 'GitHub Diff',
+                value: 'github',
+                icon: <GithubOutlined />,
+              },
+            ]}
+          />
+        </Tooltip>
+
+        {/* View Mode (Split / Unified) */}
         <Segmented<'split' | 'unified'>
           value={viewMode}
           onChange={(val) => setViewMode(val)}
           options={[
             {
-              label: 'Split View',
+              label: 'Split',
               value: 'split',
               icon: <SplitCellsOutlined />,
             },
             {
-              label: 'Unified View',
+              label: 'Unified',
               value: 'unified',
               icon: <BarsOutlined />,
             },
           ]}
         />
 
-        {/* Diff Granularity */}
-        <Segmented<Granularity>
-          value={granularity}
-          onChange={(val) => setGranularity(val)}
-          options={[
-            { label: 'Word Diff', value: 'word' },
-            { label: 'Char Diff', value: 'char' },
-            { label: 'Line Diff', value: 'line' },
-          ]}
+        {/* Language Selector */}
+        <Select
+          value={language}
+          onChange={setLanguage}
+          options={SUPPORTED_LANGUAGES}
+          size="middle"
+          style={{ width: 130 }}
+          title="Syntax Language"
         />
+
+        {/* Granularity (for GitHub mode) */}
+        {diffEngine === 'github' && (
+          <Segmented<Granularity>
+            value={granularity}
+            onChange={(val) => setGranularity(val)}
+            options={[
+              { label: 'Word', value: 'word' },
+              { label: 'Char', value: 'char' },
+              { label: 'Line', value: 'line' },
+            ]}
+          />
+        )}
+
+        {/* Jump between diff hunks */}
+        <Space.Compact size="middle">
+          <Tooltip title="Previous Change (Shift+F7 / Up)">
+            <Button icon={<ArrowUpOutlined />} onClick={onPrevDiffHunk}>
+              Prev Diff
+            </Button>
+          </Tooltip>
+          <Tooltip title="Next Change (F7 / Down)">
+            <Button icon={<ArrowDownOutlined />} onClick={onNextDiffHunk}>
+              Next Diff
+            </Button>
+          </Tooltip>
+        </Space.Compact>
 
         {/* Display Switches */}
         <div className="flex items-center gap-3 border-l pl-3">
@@ -141,33 +220,37 @@ export function Toolbar({
             </div>
           </Tooltip>
 
-          <Tooltip title="Perform case-insensitive comparison">
-            <div className="flex items-center gap-1 text-xs cursor-pointer">
-              <Switch
-                size="small"
-                checked={ignoreCase}
-                onChange={setIgnoreCase}
-              />
-              <span onClick={() => setIgnoreCase(!ignoreCase)}>
-                Ignore Case
-              </span>
-            </div>
-          </Tooltip>
+          {diffEngine === 'github' && (
+            <>
+              <Tooltip title="Perform case-insensitive comparison">
+                <div className="flex items-center gap-1 text-xs cursor-pointer">
+                  <Switch
+                    size="small"
+                    checked={ignoreCase}
+                    onChange={setIgnoreCase}
+                  />
+                  <span onClick={() => setIgnoreCase(!ignoreCase)}>
+                    Ignore Case
+                  </span>
+                </div>
+              </Tooltip>
 
-          <Tooltip title="Fold unchanged lines into expandable context blocks">
-            <div className="flex items-center gap-1 text-xs cursor-pointer">
-              <Switch
-                size="small"
-                checked={foldUnchanged}
-                onChange={setFoldUnchanged}
-              />
-              <span onClick={() => setFoldUnchanged(!foldUnchanged)}>
-                Fold Context
-              </span>
-            </div>
-          </Tooltip>
+              <Tooltip title="Fold large sections of unchanged lines">
+                <div className="flex items-center gap-1 text-xs cursor-pointer">
+                  <Switch
+                    size="small"
+                    checked={foldUnchanged}
+                    onChange={setFoldUnchanged}
+                  />
+                  <span onClick={() => setFoldUnchanged(!foldUnchanged)}>
+                    Fold Context
+                  </span>
+                </div>
+              </Tooltip>
+            </>
+          )}
 
-          <Tooltip title="Wrap long code lines instead of horizontal scrolling">
+          <Tooltip title="Wrap long lines instead of horizontal scrolling">
             <div className="flex items-center gap-1 text-xs cursor-pointer">
               <Switch
                 size="small"
@@ -182,22 +265,22 @@ export function Toolbar({
         </div>
       </div>
 
-      {/* Right side: Search, Samples, Actions */}
-      <div className="flex flex-wrap items-center gap-2.5">
-        {/* Search Input */}
+      {/* Right section: Search, Samples, Actions */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Search */}
         <div className="flex items-center gap-1">
           <Input
-            placeholder="Search in diff (Ctrl+F)..."
+            placeholder="Search in diff..."
             prefix={<SearchOutlined style={{ opacity: 0.5 }} />}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             allowClear
             size="middle"
-            style={{ width: 220 }}
+            style={{ width: 190 }}
             suffix={
               searchQuery.trim() ? (
                 <span className="text-xs opacity-60">
-                  {searchMatchCount > 0 ? `${currentMatchIndex + 1}/${searchMatchCount}` : '0 found'}
+                  {searchMatchCount > 0 ? `${currentMatchIndex + 1}/${searchMatchCount}` : '0'}
                 </span>
               ) : null
             }
@@ -205,10 +288,10 @@ export function Toolbar({
 
           {searchQuery.trim() && searchMatchCount > 0 && (
             <Space.Compact size="middle">
-              <Tooltip title="Previous match">
+              <Tooltip title="Previous search match">
                 <Button icon={<UpOutlined />} onClick={onPrevMatch} />
               </Tooltip>
-              <Tooltip title="Next match">
+              <Tooltip title="Next search match">
                 <Button icon={<DownOutlined />} onClick={onNextMatch} />
               </Tooltip>
             </Space.Compact>
@@ -222,8 +305,8 @@ export function Toolbar({
           </Button>
         </Dropdown>
 
-        {/* Toggle Editor Inputs Visibility */}
-        <Tooltip title={showInputs ? 'Hide input textareas to maximize diff' : 'Show input textareas'}>
+        {/* Show / Hide Textareas */}
+        <Tooltip title={showInputs ? 'Hide input editors to give full height to the diff' : 'Show input editors'}>
           <Button
             icon={showInputs ? <EyeInvisibleOutlined /> : <EyeOutlined />}
             onClick={() => setShowInputs(!showInputs)}
@@ -233,13 +316,13 @@ export function Toolbar({
         </Tooltip>
 
         {/* Swap */}
-        <Tooltip title="Swap Before and After inputs (Shift+Alt+S)">
+        <Tooltip title="Swap Original and Modified texts (Shift+Alt+S)">
           <Button icon={<SwapOutlined />} onClick={onSwap}>
             Swap
           </Button>
         </Tooltip>
 
-        {/* Clear with Popconfirm */}
+        {/* Clear */}
         <Popconfirm
           title="Clear both inputs?"
           description="Are you sure you want to clear both original and modified texts?"
@@ -261,7 +344,7 @@ export function Toolbar({
         </Tooltip>
 
         {/* Export .patch */}
-        <Tooltip title="Download .patch file to apply with git apply">
+        <Tooltip title="Download .patch file">
           <Button
             type="primary"
             icon={<DownloadOutlined />}
