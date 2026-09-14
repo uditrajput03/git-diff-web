@@ -1,101 +1,275 @@
-import { Columns, List, ArrowLeftRight, Trash2, FileText, Copy, AlignLeft } from 'lucide-react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+import {
+  Segmented,
+  Button,
+  Switch,
+  Dropdown,
+  Tooltip,
+  Space,
+  Input,
+  Popconfirm,
+  type MenuProps,
+} from 'antd';
+import {
+  SplitCellsOutlined,
+  BarsOutlined,
+  SwapOutlined,
+  DeleteOutlined,
+  CopyOutlined,
+  DownloadOutlined,
+  FolderOpenOutlined,
+  SearchOutlined,
+  UpOutlined,
+  DownOutlined,
+  EyeInvisibleOutlined,
+  EyeOutlined,
+} from '@ant-design/icons';
+import { type Granularity } from '../utils/diff';
+import { DIFF_SAMPLES, type DiffSample } from '../utils/samples';
 
 interface ToolbarProps {
   viewMode: 'split' | 'unified';
   setViewMode: (mode: 'split' | 'unified') => void;
+  granularity: Granularity;
+  setGranularity: (granularity: Granularity) => void;
   ignoreWhitespace: boolean;
-  setIgnoreWhitespace: (ignore: boolean) => void;
+  setIgnoreWhitespace: (val: boolean) => void;
+  ignoreCase: boolean;
+  setIgnoreCase: (val: boolean) => void;
+  wordWrap: boolean;
+  setWordWrap: (val: boolean) => void;
+  foldUnchanged: boolean;
+  setFoldUnchanged: (val: boolean) => void;
+  showInputs: boolean;
+  setShowInputs: (show: boolean) => void;
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  searchMatchCount: number;
+  currentMatchIndex: number;
+  onNextMatch: () => void;
+  onPrevMatch: () => void;
+  onSelectSample: (sample: DiffSample) => void;
   onSwap: () => void;
   onClear: () => void;
-  onLoadSample: () => void;
-  onCopyDiff: () => void;
+  onCopyPatch: () => void;
+  onExportPatch: () => void;
 }
 
 export function Toolbar({
   viewMode,
   setViewMode,
+  granularity,
+  setGranularity,
   ignoreWhitespace,
   setIgnoreWhitespace,
+  ignoreCase,
+  setIgnoreCase,
+  wordWrap,
+  setWordWrap,
+  foldUnchanged,
+  setFoldUnchanged,
+  showInputs,
+  setShowInputs,
+  searchQuery,
+  setSearchQuery,
+  searchMatchCount,
+  currentMatchIndex,
+  onNextMatch,
+  onPrevMatch,
+  onSelectSample,
   onSwap,
   onClear,
-  onLoadSample,
-  onCopyDiff,
+  onCopyPatch,
+  onExportPatch,
 }: ToolbarProps) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-4 p-3 bg-gray-50 border-b border-border">
-      <div className="flex items-center gap-2">
-        <div className="flex bg-white rounded-md border border-border overflow-hidden shadow-sm">
-          <button
-            onClick={() => setViewMode('split')}
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 text-sm font-medium transition-colors",
-              viewMode === 'split' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-gray-100"
-            )}
-          >
-            <Columns className="w-4 h-4" />
-            Split
-          </button>
-          <button
-            onClick={() => setViewMode('unified')}
-            className={cn(
-              "flex items-center gap-2 px-3 py-1.5 text-sm font-medium transition-colors",
-              viewMode === 'unified' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-gray-100"
-            )}
-          >
-            <List className="w-4 h-4" />
-            Unified
-          </button>
-        </div>
+  // Build Samples Dropdown Menu
+  const sampleMenuItems: MenuProps['items'] = DIFF_SAMPLES.map((sample) => ({
+    key: sample.id,
+    label: (
+      <div>
+        <div className="font-semibold">{sample.name}</div>
+        <div className="text-xs opacity-60">{sample.description}</div>
+      </div>
+    ),
+    onClick: () => onSelectSample(sample),
+  }));
 
-        <button
-          onClick={() => setIgnoreWhitespace(!ignoreWhitespace)}
-          className={cn(
-            "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border shadow-sm transition-colors",
-            ignoreWhitespace ? "bg-primary text-primary-foreground border-primary" : "bg-white text-muted-foreground border-border hover:bg-gray-50 hover:text-foreground"
-          )}
-          title="Ignore trailing and leading whitespaces"
-        >
-          <AlignLeft className="w-4 h-4" />
-          Ignore Whitespace
-        </button>
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-b select-none transition-colors">
+      {/* Left side: View Mode & Granularity & Options */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* View Mode */}
+        <Segmented<'split' | 'unified'>
+          value={viewMode}
+          onChange={(val) => setViewMode(val)}
+          options={[
+            {
+              label: 'Split View',
+              value: 'split',
+              icon: <SplitCellsOutlined />,
+            },
+            {
+              label: 'Unified View',
+              value: 'unified',
+              icon: <BarsOutlined />,
+            },
+          ]}
+        />
+
+        {/* Diff Granularity */}
+        <Segmented<Granularity>
+          value={granularity}
+          onChange={(val) => setGranularity(val)}
+          options={[
+            { label: 'Word Diff', value: 'word' },
+            { label: 'Char Diff', value: 'char' },
+            { label: 'Line Diff', value: 'line' },
+          ]}
+        />
+
+        {/* Display Switches */}
+        <div className="flex items-center gap-3 border-l pl-3">
+          <Tooltip title="Ignore leading and trailing whitespace differences">
+            <div className="flex items-center gap-1 text-xs cursor-pointer">
+              <Switch
+                size="small"
+                checked={ignoreWhitespace}
+                onChange={setIgnoreWhitespace}
+              />
+              <span onClick={() => setIgnoreWhitespace(!ignoreWhitespace)}>
+                Ignore Spaces
+              </span>
+            </div>
+          </Tooltip>
+
+          <Tooltip title="Perform case-insensitive comparison">
+            <div className="flex items-center gap-1 text-xs cursor-pointer">
+              <Switch
+                size="small"
+                checked={ignoreCase}
+                onChange={setIgnoreCase}
+              />
+              <span onClick={() => setIgnoreCase(!ignoreCase)}>
+                Ignore Case
+              </span>
+            </div>
+          </Tooltip>
+
+          <Tooltip title="Fold unchanged lines into expandable context blocks">
+            <div className="flex items-center gap-1 text-xs cursor-pointer">
+              <Switch
+                size="small"
+                checked={foldUnchanged}
+                onChange={setFoldUnchanged}
+              />
+              <span onClick={() => setFoldUnchanged(!foldUnchanged)}>
+                Fold Context
+              </span>
+            </div>
+          </Tooltip>
+
+          <Tooltip title="Wrap long code lines instead of horizontal scrolling">
+            <div className="flex items-center gap-1 text-xs cursor-pointer">
+              <Switch
+                size="small"
+                checked={wordWrap}
+                onChange={setWordWrap}
+              />
+              <span onClick={() => setWordWrap(!wordWrap)}>
+                Word Wrap
+              </span>
+            </div>
+          </Tooltip>
+        </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <button
-          onClick={onLoadSample}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-white text-muted-foreground border border-border rounded-md shadow-sm hover:bg-gray-50 hover:text-foreground transition-colors"
+      {/* Right side: Search, Samples, Actions */}
+      <div className="flex flex-wrap items-center gap-2.5">
+        {/* Search Input */}
+        <div className="flex items-center gap-1">
+          <Input
+            placeholder="Search in diff (Ctrl+F)..."
+            prefix={<SearchOutlined style={{ opacity: 0.5 }} />}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            allowClear
+            size="middle"
+            style={{ width: 220 }}
+            suffix={
+              searchQuery.trim() ? (
+                <span className="text-xs opacity-60">
+                  {searchMatchCount > 0 ? `${currentMatchIndex + 1}/${searchMatchCount}` : '0 found'}
+                </span>
+              ) : null
+            }
+          />
+
+          {searchQuery.trim() && searchMatchCount > 0 && (
+            <Space.Compact size="middle">
+              <Tooltip title="Previous match">
+                <Button icon={<UpOutlined />} onClick={onPrevMatch} />
+              </Tooltip>
+              <Tooltip title="Next match">
+                <Button icon={<DownOutlined />} onClick={onNextMatch} />
+              </Tooltip>
+            </Space.Compact>
+          )}
+        </div>
+
+        {/* Load Samples Dropdown */}
+        <Dropdown menu={{ items: sampleMenuItems }} placement="bottomRight">
+          <Button icon={<FolderOpenOutlined />}>
+            Samples
+          </Button>
+        </Dropdown>
+
+        {/* Toggle Editor Inputs Visibility */}
+        <Tooltip title={showInputs ? 'Hide input textareas to maximize diff' : 'Show input textareas'}>
+          <Button
+            icon={showInputs ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+            onClick={() => setShowInputs(!showInputs)}
+          >
+            {showInputs ? 'Hide Editors' : 'Show Editors'}
+          </Button>
+        </Tooltip>
+
+        {/* Swap */}
+        <Tooltip title="Swap Before and After inputs (Shift+Alt+S)">
+          <Button icon={<SwapOutlined />} onClick={onSwap}>
+            Swap
+          </Button>
+        </Tooltip>
+
+        {/* Clear with Popconfirm */}
+        <Popconfirm
+          title="Clear both inputs?"
+          description="Are you sure you want to clear both original and modified texts?"
+          onConfirm={onClear}
+          okText="Yes, Clear"
+          cancelText="Cancel"
+          okButtonProps={{ danger: true }}
         >
-          <FileText className="w-4 h-4" />
-          Load Sample
-        </button>
-        <button
-          onClick={onSwap}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-white text-muted-foreground border border-border rounded-md shadow-sm hover:bg-gray-50 hover:text-foreground transition-colors"
-        >
-          <ArrowLeftRight className="w-4 h-4" />
-          Swap
-        </button>
-        <button
-          onClick={onClear}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-white text-destructive border border-border rounded-md shadow-sm hover:bg-red-50 transition-colors"
-        >
-          <Trash2 className="w-4 h-4" />
-          Clear
-        </button>
-        <div className="w-px h-6 bg-border mx-1" />
-        <button
-          onClick={onCopyDiff}
-          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700 transition-colors"
-        >
-          <Copy className="w-4 h-4" />
-          Copy Patch
-        </button>
+          <Button danger icon={<DeleteOutlined />}>
+            Clear
+          </Button>
+        </Popconfirm>
+
+        {/* Copy Patch */}
+        <Tooltip title="Copy standard Git Unified Patch to clipboard">
+          <Button type="default" icon={<CopyOutlined />} onClick={onCopyPatch}>
+            Copy Patch
+          </Button>
+        </Tooltip>
+
+        {/* Export .patch */}
+        <Tooltip title="Download .patch file to apply with git apply">
+          <Button
+            type="primary"
+            icon={<DownloadOutlined />}
+            onClick={onExportPatch}
+          >
+            Export .patch
+          </Button>
+        </Tooltip>
       </div>
     </div>
   );
