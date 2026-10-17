@@ -45,7 +45,7 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
   );
 
   const [diffEngine, setDiffEngine] = useState<DiffEngine>(() =>
-    (getSaved('gdw_diff_engine', 'github') as DiffEngine)
+    (getSaved('gdw_diff_engine', 'monaco') as DiffEngine)
   );
   const [language, setLanguage] = useState<string>(() =>
     getSaved('gdw_language', 'plaintext')
