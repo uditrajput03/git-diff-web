@@ -49,7 +49,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
               <strong>Line Diff:</strong> Classical line-by-line block comparison.
             </li>
             <li>
-              <strong>Split View:</strong> Side-by-side side comparison with synchronized scrolling.
+              <strong>Split View:</strong> Side-by-side comparison with monotonic sequence alignment.
             </li>
             <li>
               <strong>Unified View:</strong> Single-column unified patch representation.
@@ -61,7 +61,7 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
 
         <Title level={5}><SearchOutlined /> In-Diff Search & Filters</Title>
         <Paragraph>
-          Use the search bar in the toolbar to quickly search across both before and after texts. Matches are automatically highlighted directly inside the diff view.
+          Use the search bar in the toolbar to quickly search across differences. Matches are highlighted directly in the diff view, and can be navigated with Enter and Shift+Enter.
         </Paragraph>
 
         <Divider style={{ margin: '16px 0' }} />
@@ -87,6 +87,12 @@ export function HelpModal({ open, onClose }: HelpModalProps) {
         <Descriptions size="small" column={1} bordered>
           <Descriptions.Item label={<Text code>Ctrl / Cmd + F</Text>}>
             Focus In-Diff Search Bar
+          </Descriptions.Item>
+          <Descriptions.Item label={<Text code>F7 / Shift + F7</Text>}>
+            Jump to Next / Previous Diff Hunk
+          </Descriptions.Item>
+          <Descriptions.Item label={<Text code>Enter / Shift + Enter</Text>}>
+            Jump to Next / Previous Search Match (when search is focused)
           </Descriptions.Item>
           <Descriptions.Item label={<Text code>Shift + Alt + S</Text>}>
             Swap Original and Modified texts
