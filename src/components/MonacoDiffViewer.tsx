@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import { DiffEditor, type DiffOnMount } from '@monaco-editor/react';
+import { DiffEditor, type DiffOnMount, type Monaco } from '@monaco-editor/react';
 import { Spin } from 'antd';
 
 interface MonacoDiffViewerProps {
@@ -18,6 +18,23 @@ interface MonacoDiffViewerProps {
   } | null>;
 }
 
+// Helper to patch model.setValue to prevent cursor jumping / reverse-order typing
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function patchModelSetValue(model: any) {
+  if (!model || model.__setValuePatched) return;
+  const origSetValue = model.setValue.bind(model);
+  model.setValue = function (newVal: string) {
+    // If model already contains the new value (e.g. user just typed it),
+    // do NOT call setValue because that resets cursor position to (1, 1),
+    // which causes subsequent keystrokes to be typed in reverse order.
+    if (this.getValue() === newVal) {
+      return;
+    }
+    origSetValue(newVal);
+  };
+  model.__setValuePatched = true;
+}
+
 export function MonacoDiffViewer({
   originalText,
   modifiedText,
@@ -33,12 +50,36 @@ export function MonacoDiffViewer({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const diffEditorRef = useRef<any>(null);
 
+  const handleBeforeMount = (monaco: Monaco) => {
+    // Intercept model creation so every model has guarded setValue from the start
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const origCreateModel = monaco.editor.createModel.bind(monaco.editor) as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    monaco.editor.createModel = function (...args: any[]) {
+      const model = origCreateModel(...args);
+      patchModelSetValue(model);
+      return model;
+    };
+  };
+
   const handleEditorMount: DiffOnMount = (editor) => {
     diffEditorRef.current = editor;
 
     // Two-way data binding when typing inside Monaco
     const originalEditor = editor.getOriginalEditor();
     const modifiedEditor = editor.getModifiedEditor();
+
+    // Patch initial models
+    patchModelSetValue(originalEditor.getModel());
+    patchModelSetValue(modifiedEditor.getModel());
+
+    // Patch any newly assigned models on model change
+    originalEditor.onDidChangeModel(() => {
+      patchModelSetValue(originalEditor.getModel());
+    });
+    modifiedEditor.onDidChangeModel(() => {
+      patchModelSetValue(modifiedEditor.getModel());
+    });
 
     originalEditor.onDidChangeModelContent(() => {
       const val = originalEditor.getValue();
@@ -98,6 +139,7 @@ export function MonacoDiffViewer({
             <Spin description="Loading VS Code Diff Editor..." size="large" />
           </div>
         }
+        beforeMount={handleBeforeMount}
         onMount={handleEditorMount}
         options={{
           renderSideBySide: viewMode === 'split',
