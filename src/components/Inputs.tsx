@@ -1,24 +1,24 @@
-import React, { useRef, useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Card, Button, Tooltip, Input, App as AntdApp } from 'antd';
 import {
   UploadOutlined,
   CopyOutlined,
   DeleteOutlined,
-  SnippetsOutlined,
   FileTextOutlined,
   EditOutlined,
   CheckOutlined,
+  SnippetsOutlined,
 } from '@ant-design/icons';
 
 interface InputsProps {
   originalText: string;
   modifiedText: string;
-  setOriginalText: (text: string) => void;
-  setModifiedText: (text: string) => void;
+  setOriginalText: (val: string) => void;
+  setModifiedText: (val: string) => void;
   originalFilename: string;
   modifiedFilename: string;
-  setOriginalFilename: (name: string) => void;
-  setModifiedFilename: (name: string) => void;
+  setOriginalFilename: (val: string) => void;
+  setModifiedFilename: (val: string) => void;
   isDarkMode: boolean;
 }
 
@@ -37,11 +37,13 @@ export function Inputs({
   const originalFileRef = useRef<HTMLInputElement>(null);
   const modifiedFileRef = useRef<HTMLInputElement>(null);
 
+  // In-place filename editing
   const [editingOriginalName, setEditingOriginalName] = useState(false);
-  const [editingModifiedName, setEditingModifiedName] = useState(false);
   const [origNameInput, setOrigNameInput] = useState(originalFilename);
+  const [editingModifiedName, setEditingModifiedName] = useState(false);
   const [modNameInput, setModNameInput] = useState(modifiedFilename);
 
+  // Drag and drop visual cues
   const [origDragOver, setOrigDragOver] = useState(false);
   const [modDragOver, setModDragOver] = useState(false);
 
@@ -50,65 +52,79 @@ export function Inputs({
     setText: (text: string) => void,
     setFilename: (name: string) => void
   ) => {
+    if (file.size > 2 * 1024 * 1024) {
+      message.error(`File "${file.name}" is too large (max 2MB)`);
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (e) => {
-      const text = e.target?.result as string;
-      setText(text);
+      const content = e.target?.result as string;
+      setText(content);
       setFilename(file.name);
-      message.success(`Loaded file: ${file.name}`);
+      message.success(`Loaded "${file.name}" (${(file.size / 1024).toFixed(1)} KB)`);
     };
     reader.onerror = () => {
-      message.error(`Failed to read file ${file.name}`);
+      message.error(`Failed to read "${file.name}"`);
     };
     reader.readAsText(file);
+  };
+
+  const handleCopy = (text: string) => {
+    if (!text) {
+      message.warning('Nothing to copy');
+      return;
+    }
+    navigator.clipboard
+      .writeText(text)
+      .then(() => message.success('Copied text to clipboard!'))
+      .catch(() => message.error('Failed to copy'));
   };
 
   const handlePasteClipboard = async (setText: (text: string) => void) => {
     try {
       const text = await navigator.clipboard.readText();
-      if (!text) {
+      if (text) {
+        setText(text);
+        message.success('Pasted from clipboard');
+      } else {
         message.info('Clipboard is empty');
-        return;
       }
-      setText(text);
-      message.success('Pasted from clipboard');
     } catch {
-      message.error('Unable to access clipboard. Please check browser permissions.');
+      message.info('Paste via Ctrl+V / Cmd+V directly in the editor');
     }
-  };
-
-  const handleCopy = (text: string) => {
-    if (!text) {
-      message.info('Nothing to copy');
-      return;
-    }
-    navigator.clipboard.writeText(text)
-      .then(() => message.success('Copied to clipboard'))
-      .catch(() => message.error('Failed to copy'));
   };
 
   const handleFileDrop = (
-    e: React.DragEvent<HTMLDivElement>,
+    e: React.DragEvent,
     setText: (text: string) => void,
     setFilename: (name: string) => void,
-    setDragState: (val: boolean) => void
+    setDrag: (state: boolean) => void
   ) => {
     e.preventDefault();
-    setDragState(false);
+    e.stopPropagation();
+    setDrag(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       handleFileUpload(e.dataTransfer.files[0], setText, setFilename);
     }
   };
 
   const saveOriginalName = () => {
-    const trimmed = origNameInput.trim() || 'original';
-    setOriginalFilename(trimmed);
+    const trimmed = origNameInput.trim();
+    if (trimmed) {
+      setOriginalFilename(trimmed);
+    } else {
+      setOrigNameInput(originalFilename);
+    }
     setEditingOriginalName(false);
   };
 
   const saveModifiedName = () => {
-    const trimmed = modNameInput.trim() || 'modified';
-    setModifiedFilename(trimmed);
+    const trimmed = modNameInput.trim();
+    if (trimmed) {
+      setModifiedFilename(trimmed);
+    } else {
+      setModNameInput(modifiedFilename);
+    }
     setEditingModifiedName(false);
   };
 
@@ -123,7 +139,7 @@ export function Inputs({
   };
 
   return (
-    <div className="flex flex-col md:flex-row gap-3 px-4 pb-3">
+    <div className="flex flex-row gap-2.5 px-4 pb-2 flex-shrink-0">
       {/* Hidden file inputs with value clearing for repeat uploads */}
       <input
         type="file"
@@ -155,14 +171,14 @@ export function Inputs({
       {/* Original (Before) Card */}
       <Card
         size="small"
-        className={`flex-1 shadow-sm transition-all duration-200 ${
+        className={`flex-1 min-w-0 shadow-sm transition-all duration-200 ${
           origDragOver ? 'ring-2 ring-blue-500 border-blue-500' : ''
         }`}
         style={{
           backgroundColor: isDarkMode ? '#161b22' : '#ffffff',
           borderColor: origDragOver ? '#1677ff' : isDarkMode ? '#30363d' : '#d0d7de',
         }}
-        styles={{ body: { padding: '8px' }, header: { padding: '8px 12px' } }}
+        styles={{ body: { padding: '6px 8px' }, header: { padding: '5px 8px' } }}
         onDragOver={(e) => {
           e.preventDefault();
           setOrigDragOver(true);
@@ -171,9 +187,9 @@ export function Inputs({
         onDrop={(e) => handleFileDrop(e, setOriginalText, setOriginalFilename, setOrigDragOver)}
         title={
           <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-2 max-w-[70%]">
+            <div className="flex items-center gap-1.5 min-w-0">
               <FileTextOutlined style={{ color: '#ff4d4f' }} />
-              <span className="font-semibold text-sm">Original (Before)</span>
+              <span className="font-semibold text-xs whitespace-nowrap">Original (Before)</span>
               {editingOriginalName ? (
                 <div className="flex items-center gap-1">
                   <Input
@@ -183,39 +199,39 @@ export function Inputs({
                     onPressEnter={saveOriginalName}
                     onBlur={saveOriginalName}
                     autoFocus
-                    className="font-mono text-xs w-36"
+                    className="font-mono text-xs w-28"
                   />
                   <Button
                     size="small"
                     type="text"
-                    icon={<CheckOutlined style={{ color: '#52c41a' }} />}
+                    icon={<CheckOutlined />}
                     onClick={saveOriginalName}
                   />
                 </div>
               ) : (
                 <div
-                  className="flex items-center gap-1 cursor-pointer group rounded px-1 hover:bg-black/5 dark:hover:bg-white/10"
+                  className="flex items-center gap-1 cursor-pointer group rounded px-1 hover:bg-black/5 dark:hover:bg-white/10 min-w-0"
                   onClick={() => {
                     setOrigNameInput(originalFilename);
                     setEditingOriginalName(true);
                   }}
                   title="Click to rename file"
                 >
-                  <span className="text-xs opacity-75 font-mono truncate max-w-[180px]">
+                  <span className="text-xs opacity-75 font-mono truncate max-w-[100px]">
                     [{originalFilename}]
                   </span>
-                  <EditOutlined className="text-[11px] opacity-40 group-hover:opacity-100" />
+                  <EditOutlined className="text-[10px] opacity-40 group-hover:opacity-100" />
                 </div>
               )}
             </div>
-            <span className="text-xs text-gray-500 font-mono">
-              {originalStats.lines} lines &middot; {originalStats.chars} chars
+            <span className="text-[11px] text-gray-500 font-mono whitespace-nowrap ml-1">
+              {originalStats.lines}L &middot; {originalStats.chars}C
             </span>
           </div>
         }
         extra={
-          <div className="flex items-center gap-1">
-            <Tooltip title="Upload local file (or drag & drop)">
+          <div className="flex items-center gap-0.5">
+            <Tooltip title="Upload file (or drag & drop)">
               <Button
                 size="small"
                 type="text"
@@ -231,7 +247,7 @@ export function Inputs({
                 onClick={() => handlePasteClipboard(setOriginalText)}
               />
             </Tooltip>
-            <Tooltip title="Copy all text">
+            <Tooltip title="Copy original text">
               <Button
                 size="small"
                 type="text"
@@ -239,15 +255,13 @@ export function Inputs({
                 onClick={() => handleCopy(originalText)}
               />
             </Tooltip>
-            <Tooltip title="Clear editor">
+            <Tooltip title="Clear original text">
               <Button
                 size="small"
                 type="text"
+                danger
                 icon={<DeleteOutlined />}
-                onClick={() => {
-                  setOriginalText('');
-                  message.info('Cleared original editor');
-                }}
+                onClick={() => setOriginalText('')}
               />
             </Tooltip>
           </div>
@@ -256,28 +270,27 @@ export function Inputs({
         <textarea
           value={originalText}
           onChange={(e) => setOriginalText(e.target.value)}
-          placeholder="Paste or type original code here, or drop a file..."
-          className="w-full h-36 p-2 rounded text-xs font-mono resize-y outline-none transition-colors border"
+          placeholder="Paste or type original text here, or drop a file..."
+          className="w-full h-16 p-2 rounded text-xs font-mono resize-y outline-none transition-colors border"
           style={{
             backgroundColor: isDarkMode ? '#0d1117' : '#f6f8fa',
             color: isDarkMode ? '#e6edf3' : '#1f2328',
             borderColor: isDarkMode ? '#30363d' : '#d0d7de',
           }}
-          spellCheck={false}
         />
       </Card>
 
       {/* Modified (After) Card */}
       <Card
         size="small"
-        className={`flex-1 shadow-sm transition-all duration-200 ${
+        className={`flex-1 min-w-0 shadow-sm transition-all duration-200 ${
           modDragOver ? 'ring-2 ring-blue-500 border-blue-500' : ''
         }`}
         style={{
           backgroundColor: isDarkMode ? '#161b22' : '#ffffff',
           borderColor: modDragOver ? '#1677ff' : isDarkMode ? '#30363d' : '#d0d7de',
         }}
-        styles={{ body: { padding: '8px' }, header: { padding: '8px 12px' } }}
+        styles={{ body: { padding: '6px 8px' }, header: { padding: '5px 8px' } }}
         onDragOver={(e) => {
           e.preventDefault();
           setModDragOver(true);
@@ -286,9 +299,9 @@ export function Inputs({
         onDrop={(e) => handleFileDrop(e, setModifiedText, setModifiedFilename, setModDragOver)}
         title={
           <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-2 max-w-[70%]">
+            <div className="flex items-center gap-1.5 min-w-0">
               <FileTextOutlined style={{ color: '#52c41a' }} />
-              <span className="font-semibold text-sm">Modified (After)</span>
+              <span className="font-semibold text-xs whitespace-nowrap">Modified (After)</span>
               {editingModifiedName ? (
                 <div className="flex items-center gap-1">
                   <Input
@@ -298,39 +311,39 @@ export function Inputs({
                     onPressEnter={saveModifiedName}
                     onBlur={saveModifiedName}
                     autoFocus
-                    className="font-mono text-xs w-36"
+                    className="font-mono text-xs w-28"
                   />
                   <Button
                     size="small"
                     type="text"
-                    icon={<CheckOutlined style={{ color: '#52c41a' }} />}
+                    icon={<CheckOutlined />}
                     onClick={saveModifiedName}
                   />
                 </div>
               ) : (
                 <div
-                  className="flex items-center gap-1 cursor-pointer group rounded px-1 hover:bg-black/5 dark:hover:bg-white/10"
+                  className="flex items-center gap-1 cursor-pointer group rounded px-1 hover:bg-black/5 dark:hover:bg-white/10 min-w-0"
                   onClick={() => {
                     setModNameInput(modifiedFilename);
                     setEditingModifiedName(true);
                   }}
                   title="Click to rename file"
                 >
-                  <span className="text-xs opacity-75 font-mono truncate max-w-[180px]">
+                  <span className="text-xs opacity-75 font-mono truncate max-w-[100px]">
                     [{modifiedFilename}]
                   </span>
-                  <EditOutlined className="text-[11px] opacity-40 group-hover:opacity-100" />
+                  <EditOutlined className="text-[10px] opacity-40 group-hover:opacity-100" />
                 </div>
               )}
             </div>
-            <span className="text-xs text-gray-500 font-mono">
-              {modifiedStats.lines} lines &middot; {modifiedStats.chars} chars
+            <span className="text-[11px] text-gray-500 font-mono whitespace-nowrap ml-1">
+              {modifiedStats.lines}L &middot; {modifiedStats.chars}C
             </span>
           </div>
         }
         extra={
-          <div className="flex items-center gap-1">
-            <Tooltip title="Upload local file (or drag & drop)">
+          <div className="flex items-center gap-0.5">
+            <Tooltip title="Upload file (or drag & drop)">
               <Button
                 size="small"
                 type="text"
@@ -346,7 +359,7 @@ export function Inputs({
                 onClick={() => handlePasteClipboard(setModifiedText)}
               />
             </Tooltip>
-            <Tooltip title="Copy all text">
+            <Tooltip title="Copy modified text">
               <Button
                 size="small"
                 type="text"
@@ -354,15 +367,13 @@ export function Inputs({
                 onClick={() => handleCopy(modifiedText)}
               />
             </Tooltip>
-            <Tooltip title="Clear editor">
+            <Tooltip title="Clear modified text">
               <Button
                 size="small"
                 type="text"
+                danger
                 icon={<DeleteOutlined />}
-                onClick={() => {
-                  setModifiedText('');
-                  message.info('Cleared modified editor');
-                }}
+                onClick={() => setModifiedText('')}
               />
             </Tooltip>
           </div>
@@ -371,14 +382,13 @@ export function Inputs({
         <textarea
           value={modifiedText}
           onChange={(e) => setModifiedText(e.target.value)}
-          placeholder="Paste or type modified code here, or drop a file..."
-          className="w-full h-36 p-2 rounded text-xs font-mono resize-y outline-none transition-colors border"
+          placeholder="Paste or type modified text here, or drop a file..."
+          className="w-full h-16 p-2 rounded text-xs font-mono resize-y outline-none transition-colors border"
           style={{
             backgroundColor: isDarkMode ? '#0d1117' : '#f6f8fa',
             color: isDarkMode ? '#e6edf3' : '#1f2328',
             borderColor: isDarkMode ? '#30363d' : '#d0d7de',
           }}
-          spellCheck={false}
         />
       </Card>
     </div>

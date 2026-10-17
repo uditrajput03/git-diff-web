@@ -31,6 +31,8 @@ interface DiffOutputProps {
   onMatchCountChange?: (count: number) => void;
   isDarkMode: boolean;
   navRef?: React.RefObject<DiffOutputNavHandle | null>;
+  originalFilename?: string;
+  modifiedFilename?: string;
 }
 
 const FOLD_THRESHOLD = 8;
@@ -57,6 +59,8 @@ export function DiffOutput({
   onMatchCountChange,
   isDarkMode,
   navRef,
+  originalFilename = 'original.txt',
+  modifiedFilename = 'modified.txt',
 }: DiffOutputProps) {
   const { message } = AntdApp.useApp();
   const [expandedHunks, setExpandedHunks] = useState<Record<string, boolean>>({});
@@ -271,7 +275,7 @@ export function DiffOutput({
     });
   };
 
-  // Cell styles
+  // Cell styles matching GitHub Diff
   const getLineStyle = (type: DiffType | 'empty'): React.CSSProperties => {
     if (type === 'added') {
       return {
@@ -321,7 +325,7 @@ export function DiffOutput({
       };
     }
     return {
-      backgroundColor: isDarkMode ? '#1f1f1f' : '#f6f8fa',
+      backgroundColor: isDarkMode ? '#161b22' : '#f6f8fa',
       color: isDarkMode ? '#6e7681' : '#8c959f',
       borderRight: isDarkMode ? '1px solid #30363d' : '1px solid #d0d7de',
     };
@@ -523,15 +527,15 @@ export function DiffOutput({
       return (
         <React.Fragment>
           <td
-            className="w-12 min-w-[3rem] px-2 text-right select-none"
+            className="w-10 min-w-[40px] px-1 py-0.5 text-right select-none align-top text-xs font-mono"
             style={getGutterStyle('empty')}
           />
           <td
-            className="w-6 px-2 text-center select-none"
+            className="w-5 min-w-[20px] px-0.5 py-0.5 text-center select-none align-top text-xs font-mono font-bold"
             style={getGutterStyle('empty')}
           />
           <td
-            className={`px-3 py-0.5 select-none ${isLeft ? 'border-r' : ''}`}
+            className={`px-2.5 py-0.5 select-none align-top ${isLeft ? 'border-r' : ''}`}
             style={{
               ...getLineStyle('empty'),
               borderColor: isDarkMode ? '#30363d' : '#d0d7de',
@@ -547,19 +551,21 @@ export function DiffOutput({
     return (
       <React.Fragment>
         <td
-          className="w-12 min-w-[3rem] px-2 text-right select-none"
+          className="w-10 min-w-[40px] px-1 py-0.5 text-right select-none align-top text-xs font-mono"
           style={getGutterStyle(side.type)}
         >
           {side.lineNumber}
         </td>
         <td
-          className="w-6 px-2 text-center select-none font-bold opacity-75"
+          className="w-5 min-w-[20px] px-0.5 py-0.5 text-center select-none font-bold text-xs align-top opacity-80"
           style={getLineStyle(side.type)}
         >
           {getPrefix(side.type)}
         </td>
         <td
-          className={`px-3 py-0.5 relative group ${isLeft ? 'border-r' : ''}`}
+          className={`px-2.5 py-0.5 relative group align-top text-xs font-mono break-all ${
+            isLeft ? 'border-r' : ''
+          }`}
           style={{
             ...getLineStyle(side.type),
             borderColor: isDarkMode ? '#30363d' : '#d0d7de',
@@ -606,23 +612,58 @@ export function DiffOutput({
         </div>
       )}
 
-      {/* Diff Table Container */}
+      {/* GitHub Diff Viewer Box */}
       <div
-        ref={containerRef}
-        className="flex-1 border rounded-lg overflow-auto shadow-sm flex flex-col min-h-0 diff-code-font relative"
+        className="flex-1 border rounded-lg shadow-sm flex flex-col min-h-0 diff-code-font overflow-hidden"
         style={{
           backgroundColor: isDarkMode ? '#0d1117' : '#ffffff',
           borderColor: isDarkMode ? '#30363d' : '#d0d7de',
         }}
       >
-        {viewMode === 'unified' ? (
-          /* UNIFIED VIEW */
-          <div className="flex-1 overflow-auto">
+        {/* Split View GitHub Header Bar */}
+        {viewMode === 'split' && (
+          <div
+            className="flex items-center text-xs font-mono font-medium border-b select-none flex-shrink-0"
+            style={{
+              backgroundColor: isDarkMode ? '#161b22' : '#f6f8fa',
+              borderColor: isDarkMode ? '#30363d' : '#d0d7de',
+            }}
+          >
+            <div
+              className="w-1/2 px-3 py-1.5 border-r truncate flex items-center justify-between"
+              style={{ borderColor: isDarkMode ? '#30363d' : '#d0d7de' }}
+            >
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="w-2 h-2 rounded-full bg-red-400 inline-block" />
+                <span className="font-semibold truncate">{originalFilename}</span>
+              </div>
+              <span className="text-[11px] opacity-60 ml-2 whitespace-nowrap">Original (Before)</span>
+            </div>
+            <div className="w-1/2 px-3 py-1.5 truncate flex items-center justify-between">
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />
+                <span className="font-semibold truncate">{modifiedFilename}</span>
+              </div>
+              <span className="text-[11px] opacity-60 ml-2 whitespace-nowrap">Modified (After)</span>
+            </div>
+          </div>
+        )}
+
+        {/* Scrollable Diff Content */}
+        <div ref={containerRef} className="flex-1 overflow-auto">
+          {viewMode === 'unified' ? (
+            /* UNIFIED VIEW */
             <table
-              className={`w-full border-collapse ${
+              className={`w-full table-fixed border-collapse ${
                 wordWrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
               }`}
             >
+              <colgroup>
+                <col className="w-10" style={{ width: 40 }} />
+                <col className="w-10" style={{ width: 40 }} />
+                <col className="w-5" style={{ width: 20 }} />
+                <col />
+              </colgroup>
               <tbody>
                 {processedUnifiedItems.map((item, index) => {
                   if (item.isHunk) {
@@ -670,24 +711,24 @@ export function DiffOutput({
                                 style={getLineStyle(line.type)}
                               >
                                 <td
-                                  className="w-12 min-w-[3rem] px-2 text-right select-none"
+                                  className="w-10 min-w-[40px] px-1 py-0.5 text-right select-none align-top text-xs font-mono"
                                   style={getGutterStyle(line.type)}
                                 >
                                   {line.oldLineNumber}
                                 </td>
                                 <td
-                                  className="w-12 min-w-[3rem] px-2 text-right select-none"
+                                  className="w-10 min-w-[40px] px-1 py-0.5 text-right select-none align-top text-xs font-mono"
                                   style={getGutterStyle(line.type)}
                                 >
                                   {line.newLineNumber}
                                 </td>
                                 <td
-                                  className="w-6 px-2 text-center select-none font-bold opacity-75"
+                                  className="w-5 min-w-[20px] px-0.5 py-0.5 text-center select-none font-bold text-xs align-top opacity-80"
                                   style={getLineStyle(line.type)}
                                 >
                                   {getPrefix(line.type)}
                                 </td>
-                                <td className="px-3 py-0.5 relative group">
+                                <td className="px-2.5 py-0.5 relative group align-top text-xs font-mono break-all">
                                   {renderSpans(line.spans, line.content)}
                                   {line.content && (
                                     <Tooltip
@@ -774,24 +815,24 @@ export function DiffOutput({
                       style={getLineStyle(line.type)}
                     >
                       <td
-                        className="w-12 min-w-[3rem] px-2 text-right select-none"
+                        className="w-10 min-w-[40px] px-1 py-0.5 text-right select-none align-top text-xs font-mono"
                         style={getGutterStyle(line.type)}
                       >
                         {line.oldLineNumber}
                       </td>
                       <td
-                        className="w-12 min-w-[3rem] px-2 text-right select-none"
+                        className="w-10 min-w-[40px] px-1 py-0.5 text-right select-none align-top text-xs font-mono"
                         style={getGutterStyle(line.type)}
                       >
                         {line.newLineNumber}
                       </td>
                       <td
-                        className="w-6 px-2 text-center select-none font-bold opacity-75"
+                        className="w-5 min-w-[20px] px-0.5 py-0.5 text-center select-none font-bold text-xs align-top opacity-80"
                         style={getLineStyle(line.type)}
                       >
                         {getPrefix(line.type)}
                       </td>
-                      <td className="px-3 py-0.5 relative group">
+                      <td className="px-2.5 py-0.5 relative group align-top text-xs font-mono break-all">
                         {renderSpans(line.spans, line.content)}
                         {line.content && (
                           <Tooltip title={isCopied ? 'Copied!' : 'Copy line'}>
@@ -821,15 +862,21 @@ export function DiffOutput({
                 })}
               </tbody>
             </table>
-          </div>
-        ) : (
-          /* SPLIT VIEW - SINGLE UNIFIED TABLE (100% Monotonic Line Alignment) */
-          <div className="flex-1 overflow-auto">
+          ) : (
+            /* SPLIT VIEW - PURE 50/50 TABLE WITH LOCKED MONOTONIC ALIGNMENT */
             <table
-              className={`w-full border-collapse ${
+              className={`w-full table-fixed border-collapse ${
                 wordWrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
               }`}
             >
+              <colgroup>
+                <col className="w-10" style={{ width: 40 }} />
+                <col className="w-5" style={{ width: 20 }} />
+                <col />
+                <col className="w-10" style={{ width: 40 }} />
+                <col className="w-5" style={{ width: 20 }} />
+                <col />
+              </colgroup>
               <tbody>
                 {processedSplitItems.map((item, index) => {
                   if (item.isHunk) {
@@ -936,8 +983,8 @@ export function DiffOutput({
                 })}
               </tbody>
             </table>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

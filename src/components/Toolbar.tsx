@@ -34,6 +34,7 @@ import { DIFF_SAMPLES, type DiffSample } from '../utils/samples';
 export type DiffEngine = 'monaco' | 'github';
 
 const SUPPORTED_LANGUAGES = [
+  { label: 'Plain Text', value: 'plaintext' },
   { label: 'TypeScript', value: 'typescript' },
   { label: 'JavaScript', value: 'javascript' },
   { label: 'JSON', value: 'json' },
@@ -45,7 +46,6 @@ const SUPPORTED_LANGUAGES = [
   { label: 'Shell / Bash', value: 'shell' },
   { label: 'Rust', value: 'rust' },
   { label: 'Go', value: 'go' },
-  { label: 'Plain Text', value: 'plaintext' },
 ];
 
 interface ToolbarProps {
@@ -118,8 +118,8 @@ export function Toolbar({
   const sampleMenuItems: MenuProps['items'] = DIFF_SAMPLES.map((sample) => ({
     key: sample.id,
     label: (
-      <div className="py-1">
-        <div className="font-semibold text-sm">{sample.name}</div>
+      <div>
+        <div className="font-semibold">{sample.name}</div>
         <div className="text-xs opacity-60">{sample.description}</div>
       </div>
     ),
@@ -131,7 +131,7 @@ export function Toolbar({
       {/* Left section: Diff Engine, View Mode, Language, Granularity, Hunk Navigation, Toggles */}
       <div className="flex flex-wrap items-center gap-2">
         {/* Diff Engine Selector: VS Code vs GitHub */}
-        <Tooltip title="Choose between the VS Code Monaco diff editor or GitHub Web PR view">
+        <Tooltip title="Choose between the real VS Code Monaco diff editor or GitHub Web PR view">
           <Segmented<DiffEngine>
             value={diffEngine}
             onChange={(val) => setDiffEngine(val)}
@@ -180,7 +180,7 @@ export function Toolbar({
           title="Syntax Language"
         />
 
-        {/* Granularity (GitHub mode) */}
+        {/* Granularity (for GitHub mode) */}
         {diffEngine === 'github' && (
           <Tooltip title="Highlight differences at Word, Character, or full Line level">
             <Segmented<Granularity>
@@ -197,12 +197,12 @@ export function Toolbar({
 
         {/* Jump between diff hunks */}
         <Space.Compact size="middle">
-          <Tooltip title="Previous Change (Shift+F7)">
+          <Tooltip title="Previous Change (Shift+F7 / Up)">
             <Button icon={<ArrowUpOutlined />} onClick={onPrevDiffHunk}>
               Prev Diff
             </Button>
           </Tooltip>
-          <Tooltip title="Next Change (F7)">
+          <Tooltip title="Next Change (F7 / Down)">
             <Button icon={<ArrowDownOutlined />} onClick={onNextDiffHunk}>
               Next Diff
             </Button>
