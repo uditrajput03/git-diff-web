@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://uditrajput03.github.io/git-diff-web/sitemap.xml

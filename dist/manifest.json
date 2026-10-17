@@ -1,0 +1,17 @@
+{
+  "short_name": "GitDiff",
+  "name": "Git Diff Checker – Online Code & Text Comparison",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ],
+  "start_url": "./",
+  "background_color": "#0b0e14",
+  "theme_color": "#1677ff",
+  "display": "standalone",
+  "orientation": "landscape-primary",
+  "description": "Fast, private, in-browser Git diff and code comparison tool powered by Monaco Editor."
+}
