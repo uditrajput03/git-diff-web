@@ -1,7 +1,8 @@
 {
-  "name": "temp-app",
+  "name": "git-diff-web",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Fast, privacy-first in-browser code and text diff comparator with VS Code Monaco and GitHub-style diff views, syntax highlighting, and Git patch export.",
   "type": "module",
   "scripts": {
     "dev": "vite",
