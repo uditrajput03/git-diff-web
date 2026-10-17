@@ -402,6 +402,60 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
         </div>
       </div>
 
+            {/* Sleek bottom status & SEO bar */}
+      <footer
+        className={`px-4 py-1.5 text-xs flex items-center justify-between border-t transition-colors select-none ${
+          isDarkMode
+            ? "bg-[#0f131a] border-[#30363d] text-gray-400"
+            : "bg-white border-gray-200 text-gray-600"
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+          <span className="font-medium">100% Client-Side &amp; Private</span>
+          <span className="opacity-40">•</span>
+          <span className="hidden sm:inline">Monaco Diff Engine</span>
+          <span className="opacity-40 hidden sm:inline">•</span>
+          <span className="hidden md:inline">RFC Git Patch Compatible</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setHelpOpen(true)}
+            className="hover:text-blue-500 underline underline-offset-2 transition-colors cursor-pointer bg-transparent border-0 p-0 text-xs font-medium"
+          >
+            Documentation, Shortcuts &amp; FAQ
+          </button>
+        </div>
+      </footer>
+
+      {/* Semantic SEO content section for search engine crawlers & accessibility */}
+      <section aria-label="Git Diff Checker Overview" className="sr-only">
+        <h2>Free Online Code &amp; Text Comparison Tool</h2>
+        <p>
+          Git Diff Web is a fast, secure, browser-based Git diff comparator powered by
+          Monaco Editor and custom token-level diff algorithms. Compare source code, JSON,
+          Markdown, configuration files, and raw text side-by-side or in unified view.
+        </p>
+        <h3>Key Features</h3>
+        <ul>
+          <li>Side-by-side split and unified diff views</li>
+          <li>Intra-line word-level and character-level difference highlighting</li>
+          <li>100% client-side privacy – no code or data is uploaded to remote servers</li>
+          <li>Exportable RFC unified .patch files ready for git apply</li>
+          <li>Syntax highlighting for TypeScript, JavaScript, Python, JSON, HTML, CSS, Go, Rust, Java, C++, and SQL</li>
+          <li>In-diff search with keyboard shortcuts and hunk navigation</li>
+        </ul>
+        <h3>Frequently Asked Questions</h3>
+        <dl>
+          <dt>Is my code uploaded to a server?</dt>
+          <dd>No. All diffing operations occur entirely within your browser for absolute privacy and security.</dd>
+          <dt>What is the difference between split and unified diffs?</dt>
+          <dd>Split diff shows side-by-side file comparisons, whereas unified diff shows inline additions and deletions matching standard git diff CLI output.</dd>
+          <dt>Can I export Git patches?</dt>
+          <dd>Yes. You can copy the unified Git patch to clipboard or download a .patch file compatible with git apply.</dd>
+        </dl>
+      </section>
+
       <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );

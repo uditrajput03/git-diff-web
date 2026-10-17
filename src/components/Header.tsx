@@ -34,14 +34,14 @@ export function Header({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-base tracking-tight">Git Diff Web</span>
+              <h1 className="font-bold text-base tracking-tight m-0 p-0 leading-none">Git Diff Web</h1>
               <Tag color="processing" style={{ margin: 0, fontSize: '11px', lineHeight: '18px' }}>
                 v2.0
               </Tag>
             </div>
-            <span className="text-xs opacity-60 hidden sm:inline">
-              Smart Word & Character Code Comparator
-            </span>
+            <p className="text-xs opacity-60 hidden sm:inline m-0 p-0 leading-none">
+              Smart Word &amp; Character Code Comparator
+            </p>
           </div>
         </div>
       </div>
@@ -103,7 +103,7 @@ export function Header({
             />
           </Tooltip>
 
-          <Tooltip title="Keyboard shortcuts & User Guide">
+          <Tooltip title="Keyboard shortcuts, FAQ & User Guide">
             <Button
               type="text"
               icon={<QuestionCircleOutlined />}

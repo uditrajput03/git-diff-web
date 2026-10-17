@@ -2,12 +2,217 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Git Diff Checker</title>
+    <title>Git Diff Checker – Free Online Code &amp; Text Comparison Tool</title>
+
+    <!-- Primary Meta Tags -->
+    <meta name="title" content="Git Diff Checker – Free Online Code &amp; Text Comparison Tool" />
+    <meta
+      name="description"
+      content="Compare code, text, JSON, and Git diffs online with Monaco Editor. Side-by-side split &amp; unified diffs, syntax highlighting, word-level diffing, and 100% private in-browser comparison."
+    />
+    <meta
+      name="keywords"
+      content="git diff checker, online diff tool, code compare, diff viewer, text comparison, compare two files, monaco diff, syntax highlight diff, git patch generator, word diff, unified diff, split diff"
+    />
+    <meta name="author" content="Git Diff Web" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+    <link rel="canonical" href="https://uditrajput03.github.io/git-diff-web/" />
+
+    <!-- Favicon & PWA Icons -->
+    <link rel="icon" type="image/svg+xml" href="/git-diff-web/favicon.svg" />
+    <link rel="apple-touch-icon" href="/git-diff-web/favicon.svg" />
+    <link rel="manifest" href="/git-diff-web/manifest.json" />
+    <meta name="theme-color" content="#1677ff" />
+    <meta name="application-name" content="Git Diff Checker" />
+    <meta name="apple-mobile-web-app-title" content="Git Diff" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://uditrajput03.github.io/git-diff-web/" />
+    <meta property="og:title" content="Git Diff Checker – Free Online Code &amp; Text Comparison Tool" />
+    <meta
+      property="og:description"
+      content="Fast, private, in-browser code and text diff checker powered by Monaco Editor. Supports split &amp; unified views, syntax highlighting, and exportable Git patches."
+    />
+    <meta property="og:site_name" content="Git Diff Checker" />
+    <meta property="og:image" content="https://uditrajput03.github.io/git-diff-web/favicon.svg" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:url" content="https://uditrajput03.github.io/git-diff-web/" />
+    <meta name="twitter:title" content="Git Diff Checker – Free Online Code &amp; Text Comparison Tool" />
+    <meta
+      name="twitter:description"
+      content="Free online Git diff checker and code comparator with split/unified views, Monaco editor, and instant client-side privacy."
+    />
+    <meta name="twitter:image" content="https://uditrajput03.github.io/git-diff-web/favicon.svg" />
+
+    <!-- Structured Data (JSON-LD) for Search Engines -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebApplication",
+            "@id": "https://uditrajput03.github.io/git-diff-web/#app",
+            "name": "Git Diff Checker",
+            "url": "https://uditrajput03.github.io/git-diff-web/",
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": "All",
+            "browserRequirements": "Requires JavaScript",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "description": "Free, browser-based Git diff and code comparison tool powered by Monaco Editor. Compare text, code, JSON, and files side-by-side or unified with syntax highlighting.",
+            "featureList": [
+              "Side-by-side split and unified diff views",
+              "Monaco editor diff engine with inline edits",
+              "GitHub-style diff viewer with token-level highlighting",
+              "Syntax highlighting for 20+ programming languages",
+              "100% client-side privacy - no code sent to servers",
+              "Ignore whitespace, ignore case, and word-wrap toggles",
+              "Export Git patch (.patch) files and copy unified diffs to clipboard"
+            ]
+          },
+          {
+            "@type": "HowTo",
+            "@id": "https://uditrajput03.github.io/git-diff-web/#howto",
+            "name": "How to Compare Code and Text Online with Git Diff Checker",
+            "description": "Step-by-step guide to comparing two code files or text snippets and generating diffs.",
+            "step": [
+              {
+                "@type": "HowToStep",
+                "name": "Paste Original Code",
+                "text": "Paste your original source code or text into the left pane, or upload an original file."
+              },
+              {
+                "@type": "HowToStep",
+                "name": "Paste Modified Code",
+                "text": "Paste the updated or modified version of the code into the right pane, or upload a modified file."
+              },
+              {
+                "@type": "HowToStep",
+                "name": "Inspect Differences",
+                "text": "View line-by-line and intra-line word/character differences highlighted in split or unified view."
+              },
+              {
+                "@type": "HowToStep",
+                "name": "Export or Copy Diff",
+                "text": "Export a standard Git .patch file or copy the unified patch directly to your clipboard."
+              }
+            ]
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://uditrajput03.github.io/git-diff-web/#faq",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Is my code or sensitive data uploaded to any server?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No. Git Diff Checker runs 100% locally in your web browser. None of your source code, text snippets, or files are sent over the network or stored on any server."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What is the difference between Split View and Unified View?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Split View presents original and modified files side-by-side with synchronized scrolling. Unified View displays changes in a single column with '+' (additions) and '-' (deletions), matching the standard git diff command-line output."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Which programming languages are supported?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Git Diff Checker supports syntax highlighting for TypeScript, JavaScript, Python, JSON, HTML, CSS, Go, Rust, Java, C++, C#, PHP, Ruby, SQL, YAML, Markdown, Shell, and Plain Text."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can I export standard Git patches?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. You can copy the unified Git diff patch to your clipboard or download a .patch file that can be applied directly using 'git apply' in your terminal."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does Git Diff Checker support word-level and character-level diffs?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. You can toggle between Word granularity, Character granularity, and Line-by-line granularity to pinpoint the exact tokens or characters that changed."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Pre-rendered semantic SEO fallback for search engine crawlers -->
+    <div id="root">
+      <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; line-height: 1.6; color: #1f2937;">
+        <header>
+          <h1 style="font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem; color: #111827;">
+            Git Diff Checker – Free Online Code &amp; Text Comparison Tool
+          </h1>
+          <p style="font-size: 1.1rem; color: #4b5563; margin-bottom: 1.5rem;">
+            A fast, secure, browser-based Git diff comparator powered by the Monaco Editor. Compare source code, configuration files, JSON, and text side-by-side or unified with word-level highlighting and instant privacy.
+          </p>
+        </header>
+
+        <main>
+          <section style="margin-bottom: 2rem;">
+            <h2 style="font-size: 1.4rem; font-weight: 600; color: #1f2937;">Key Features</h2>
+            <ul>
+              <li><strong>Dual Diff Engines:</strong> Seamlessly switch between the Monaco Diff Editor (VS Code engine) and a GitHub-style token-level diff viewer.</li>
+              <li><strong>Split &amp; Unified Views:</strong> Inspect changes side-by-side or in a traditional unified patch view.</li>
+              <li><strong>Intra-Line Granularity:</strong> Pinpoint changes down to specific words or individual characters.</li>
+              <li><strong>100% Client-Side Privacy:</strong> All computations happen directly in your browser. Zero code is uploaded to any remote server.</li>
+              <li><strong>Git Patch Generation:</strong> Copy or download standard <code>.patch</code> files ready for <code>git apply</code>.</li>
+              <li><strong>Multi-Language Syntax Highlighting:</strong> Supports JavaScript, TypeScript, Python, JSON, Go, Rust, Java, C++, SQL, YAML, and more.</li>
+            </ul>
+          </section>
+
+          <section style="margin-bottom: 2rem;">
+            <h2 style="font-size: 1.4rem; font-weight: 600; color: #1f2937;">How to Compare Code Online</h2>
+            <ol>
+              <li>Paste or upload your original code into the left editor.</li>
+              <li>Paste or upload your modified code into the right editor.</li>
+              <li>Review the automatically highlighted additions, deletions, and modifications.</li>
+              <li>Toggle whitespace, case sensitivity, or granularity to refine the comparison.</li>
+              <li>Export or copy the unified Git patch.</li>
+            </ol>
+          </section>
+
+          <section>
+            <h2 style="font-size: 1.4rem; font-weight: 600; color: #1f2937;">Frequently Asked Questions (FAQ)</h2>
+            <details style="margin-bottom: 1rem;">
+              <summary style="font-weight: 600; cursor: pointer;">Is my code uploaded to any external server?</summary>
+              <p>No. All diffing operations occur 100% client-side in your web browser. Your confidential code and documents never leave your machine.</p>
+            </details>
+            <details style="margin-bottom: 1rem;">
+              <summary style="font-weight: 600; cursor: pointer;">Can I generate patches compatible with Git CLI?</summary>
+              <p>Yes. The export patch button produces a standard unified diff that can be applied in your terminal using <code>git apply &lt;file.patch&gt;</code>.</p>
+            </details>
+          </section>
+        </main>
+      </div>
+    </div>
+    <noscript>
+      <div style="padding: 20px; text-align: center; color: #b91c1c;">
+        <strong>JavaScript is required:</strong> Please enable JavaScript in your browser to use the interactive Git Diff Checker.
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
