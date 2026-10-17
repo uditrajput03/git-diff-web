@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { ConfigProvider, theme, message, App as AntdApp } from 'antd';
+import { ConfigProvider, theme, App as AntdApp } from 'antd';
 import { Header } from './components/Header';
 import { Toolbar, type DiffEngine } from './components/Toolbar';
 import { Inputs } from './components/Inputs';
@@ -30,6 +30,8 @@ interface MainAppProps {
 }
 
 function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
+  const { message } = AntdApp.useApp();
+
   const [originalText, setOriginalText] = useState<string>(() =>
     getSaved('gdw_original', DIFF_SAMPLES[0].original)
   );
@@ -207,7 +209,7 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
     setOriginalFilename(modifiedFilename);
     setModifiedFilename(originalFilename);
     message.success('Swapped Original and Modified inputs');
-  }, [originalText, modifiedText, originalFilename, modifiedFilename]);
+  }, [originalText, modifiedText, originalFilename, modifiedFilename, message]);
 
   const handleClear = useCallback(() => {
     setOriginalText('');
@@ -215,7 +217,7 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
     setOriginalFilename('original.txt');
     setModifiedFilename('modified.txt');
     message.info('Cleared both inputs');
-  }, []);
+  }, [message]);
 
   const handleSelectSample = useCallback((sample: DiffSample) => {
     setOriginalText(sample.original);
@@ -224,7 +226,7 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
     setModifiedFilename(sample.modifiedFilename);
     setLanguage(sample.language);
     message.success(`Loaded sample: ${sample.name}`);
-  }, []);
+  }, [message]);
 
   const handleOriginalFilenameChange = (name: string) => {
     setOriginalFilename(name);
@@ -255,7 +257,7 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
       .writeText(diffResult.patch)
       .then(() => message.success('Git Unified Patch copied to clipboard!'))
       .catch(() => message.error('Failed to copy patch to clipboard'));
-  }, [diffResult.patch, diffResult.metrics]);
+  }, [diffResult.patch, diffResult.metrics, message]);
 
   const handleExportPatch = useCallback(() => {
     if (diffResult.metrics.additions === 0 && diffResult.metrics.deletions === 0) {
@@ -270,7 +272,7 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
     const filename = `${cleanMod || 'changes'}.patch`;
     downloadFile(diffResult.patch, filename, 'text/x-diff');
     message.success(`Exported ${filename}`);
-  }, [diffResult.patch, diffResult.metrics, modifiedFilename]);
+  }, [diffResult.patch, diffResult.metrics, modifiedFilename, message]);
 
   // Keyboard shortcuts
   useEffect(() => {

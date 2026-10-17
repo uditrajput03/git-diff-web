@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useImperativeHandle } from 'react';
-import { Empty, Alert, Button, Tooltip, message } from 'antd';
+import { Empty, Alert, Button, Tooltip, App as AntdApp } from 'antd';
 import {
   CheckCircleOutlined,
   DownOutlined,
@@ -58,6 +58,7 @@ export function DiffOutput({
   isDarkMode,
   navRef,
 }: DiffOutputProps) {
+  const { message } = AntdApp.useApp();
   const [expandedHunks, setExpandedHunks] = useState<Record<string, boolean>>({});
   const [copiedLineId, setCopiedLineId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);

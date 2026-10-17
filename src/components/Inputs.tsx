@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Card, Button, Tooltip, Input, message } from 'antd';
+import { Card, Button, Tooltip, Input, App as AntdApp } from 'antd';
 import {
   UploadOutlined,
   CopyOutlined,
@@ -33,6 +33,7 @@ export function Inputs({
   setModifiedFilename,
   isDarkMode,
 }: InputsProps) {
+  const { message } = AntdApp.useApp();
   const originalFileRef = useRef<HTMLInputElement>(null);
   const modifiedFileRef = useRef<HTMLInputElement>(null);
 
@@ -242,9 +243,11 @@ export function Inputs({
               <Button
                 size="small"
                 type="text"
-                danger
                 icon={<DeleteOutlined />}
-                onClick={() => setOriginalText('')}
+                onClick={() => {
+                  setOriginalText('');
+                  message.info('Cleared original editor');
+                }}
               />
             </Tooltip>
           </div>
@@ -355,9 +358,11 @@ export function Inputs({
               <Button
                 size="small"
                 type="text"
-                danger
                 icon={<DeleteOutlined />}
-                onClick={() => setModifiedText('')}
+                onClick={() => {
+                  setModifiedText('');
+                  message.info('Cleared modified editor');
+                }}
               />
             </Tooltip>
           </div>
