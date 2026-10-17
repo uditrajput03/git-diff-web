@@ -151,7 +151,7 @@ export function MonacoDiffViewer({
       }}
       loading={
         <div className="flex h-full w-full items-center justify-center">
-          <Spin size="large" tip="Loading Monaco Editor..." />
+          <Spin size="large" description="Loading Monaco Editor..." />
         </div>
       }
     />
