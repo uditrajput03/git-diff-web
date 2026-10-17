@@ -4,13 +4,12 @@ import { Header } from './components/Header';
 import { Toolbar, type DiffEngine } from './components/Toolbar';
 import { Inputs } from './components/Inputs';
 import { DiffOutput, type DiffOutputNavHandle } from './components/DiffOutput';
-import { MonacoDiffViewer } from './components/MonacoDiffViewer';
+import { MonacoDiffViewer, type MonacoDiffNavHandle } from './components/MonacoDiffViewer';
 import { HelpModal } from './components/HelpModal';
 import {
   computeDiff,
   downloadFile,
   detectLanguage,
-  cleanFilename,
   type DiffResult,
   type Granularity,
 } from './utils/diff';
@@ -46,10 +45,10 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
   );
 
   const [diffEngine, setDiffEngine] = useState<DiffEngine>(() =>
-    (getSaved('gdw_diff_engine', 'monaco') as DiffEngine)
+    (getSaved('gdw_diff_engine', 'github') as DiffEngine)
   );
   const [language, setLanguage] = useState<string>(() =>
-    getSaved('gdw_language', DIFF_SAMPLES[0].language)
+    getSaved('gdw_language', 'plaintext')
   );
 
   const [viewMode, setViewMode] = useState<'split' | 'unified'>(() =>
@@ -66,13 +65,13 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
     getSaved('gdw_ignore_case', 'false') === 'true'
   );
   const [wordWrap, setWordWrap] = useState<boolean>(() =>
-    getSaved('gdw_word_wrap', 'false') === 'true'
+    getSaved('gdw_word_wrap', 'true') === 'true'
   );
   const [foldUnchanged, setFoldUnchanged] = useState<boolean>(() =>
     getSaved('gdw_fold_unchanged', 'false') === 'true'
   );
   const [showInputs, setShowInputs] = useState<boolean>(() =>
-    getSaved('gdw_show_inputs', 'false') === 'true'
+    getSaved('gdw_show_inputs', 'true') === 'true'
   );
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -80,18 +79,9 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
   const [renderedMatchCount, setRenderedMatchCount] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
 
-  // References for Diff hunk navigation
-  const monacoNavRef = useRef<{
-    nextDiff: () => void;
-    prevDiff: () => void;
-  } | null>(null);
-
+  // References for diff hunk navigation
+  const monacoNavRef = useRef<MonacoDiffNavHandle | null>(null);
   const githubNavRef = useRef<DiffOutputNavHandle | null>(null);
-
-  // Reset match index when query changes
-  useEffect(() => {
-    setCurrentMatchIndex(0);
-  }, [searchQuery]);
 
   // Persistence
   useEffect(() => {
@@ -158,120 +148,111 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
     modifiedFilename,
   ]);
 
-  // Calculate search match count for unified diff / Monaco
-  const calculatedMatchCount = useMemo(() => {
+  // Search match count calculation
+  const searchMatchCount = useMemo(() => {
     if (!searchQuery.trim()) return 0;
-    const q = searchQuery.trim().toLowerCase();
+    const query = searchQuery.toLowerCase();
     let count = 0;
-    for (const line of diffResult.unified) {
-      const lower = line.content.toLowerCase();
+
+    const countInStr = (str: string) => {
       let pos = 0;
-      while ((pos = lower.indexOf(q, pos)) !== -1) {
+      const lower = str.toLowerCase();
+      while ((pos = lower.indexOf(query, pos)) !== -1) {
         count++;
-        pos += q.length;
+        pos += query.length;
       }
-    }
+    };
+
+    diffResult.unified.forEach((l) => countInStr(l.content));
     return count;
   }, [searchQuery, diffResult.unified]);
 
   const effectiveMatchCount =
-    diffEngine === 'github' ? renderedMatchCount : calculatedMatchCount;
+    diffEngine === 'github' && renderedMatchCount > 0
+      ? renderedMatchCount
+      : searchMatchCount;
 
-  const handleNextMatch = () => {
+  // Reset match index when search changes
+  useEffect(() => {
+    setCurrentMatchIndex(0);
+  }, [searchQuery]);
+
+  const handleNextMatch = useCallback(() => {
     if (effectiveMatchCount === 0) return;
     setCurrentMatchIndex((prev) => (prev + 1) % effectiveMatchCount);
-  };
+  }, [effectiveMatchCount]);
 
-  const handlePrevMatch = () => {
+  const handlePrevMatch = useCallback(() => {
     if (effectiveMatchCount === 0) return;
-    setCurrentMatchIndex((prev) => (prev - 1 + effectiveMatchCount) % effectiveMatchCount);
-  };
+    setCurrentMatchIndex(
+      (prev) => (prev - 1 + effectiveMatchCount) % effectiveMatchCount
+    );
+  }, [effectiveMatchCount]);
 
-  const handleNextDiffHunk = () => {
-    if (diffEngine === 'monaco' && monacoNavRef.current) {
-      monacoNavRef.current.nextDiff();
-    } else if (diffEngine === 'github' && githubNavRef.current) {
-      githubNavRef.current.nextDiff();
+  // Jump between diff hunks
+  const handleNextDiffHunk = useCallback(() => {
+    if (diffEngine === 'monaco') {
+      monacoNavRef.current?.nextDiff();
+    } else {
+      githubNavRef.current?.nextDiff();
     }
-  };
+  }, [diffEngine]);
 
-  const handlePrevDiffHunk = () => {
-    if (diffEngine === 'monaco' && monacoNavRef.current) {
-      monacoNavRef.current.prevDiff();
-    } else if (diffEngine === 'github' && githubNavRef.current) {
-      githubNavRef.current.prevDiff();
+  const handlePrevDiffHunk = useCallback(() => {
+    if (diffEngine === 'monaco') {
+      monacoNavRef.current?.prevDiff();
+    } else {
+      githubNavRef.current?.prevDiff();
     }
-  };
+  }, [diffEngine]);
 
-  const handleSwap = useCallback(() => {
-    setOriginalText(modifiedText);
-    setModifiedText(originalText);
-    setOriginalFilename(modifiedFilename);
-    setModifiedFilename(originalFilename);
-    message.success('Swapped Original and Modified inputs');
-  }, [originalText, modifiedText, originalFilename, modifiedFilename, message]);
-
-  const handleClear = useCallback(() => {
-    setOriginalText('');
-    setModifiedText('');
-    setOriginalFilename('original.txt');
-    setModifiedFilename('modified.txt');
-    message.info('Cleared both inputs');
-  }, [message]);
-
-  const handleSelectSample = useCallback((sample: DiffSample) => {
+  // Sample Loader
+  const handleSelectSample = (sample: DiffSample) => {
     setOriginalText(sample.original);
     setModifiedText(sample.modified);
     setOriginalFilename(sample.originalFilename);
     setModifiedFilename(sample.modifiedFilename);
-    setLanguage(sample.language);
-    message.success(`Loaded sample: ${sample.name}`);
-  }, [message]);
-
-  const handleOriginalFilenameChange = (name: string) => {
-    setOriginalFilename(name);
-    const detected = detectLanguage(name);
-    if (detected !== 'plaintext') {
-      setLanguage(detected);
-    }
+    setLanguage(sample.language || detectLanguage(sample.originalFilename));
+    message.success(`Loaded sample: "${sample.name}"`);
   };
 
-  const handleModifiedFilenameChange = (name: string) => {
-    setModifiedFilename(name);
-    const detected = detectLanguage(name);
-    if (detected !== 'plaintext') {
-      setLanguage(detected);
-    }
+  // Swap Left and Right
+  const handleSwap = () => {
+    setOriginalText(modifiedText);
+    setModifiedText(originalText);
+    setOriginalFilename(modifiedFilename);
+    setModifiedFilename(originalFilename);
+    message.info('Swapped Original and Modified contents');
   };
 
-  const handleCopyPatch = useCallback(() => {
-    if (diffResult.metrics.additions === 0 && diffResult.metrics.deletions === 0) {
-      message.info('No differences to copy: files are identical');
-      return;
-    }
-    if (!diffResult.patch) {
-      message.info('No diff to copy');
+  // Clear inputs
+  const handleClear = () => {
+    setOriginalText('');
+    setModifiedText('');
+    message.info('Cleared all editors');
+  };
+
+  // Copy patch
+  const handleCopyPatch = () => {
+    if (!diffResult.patch || (diffResult.metrics.additions === 0 && diffResult.metrics.deletions === 0)) {
+      message.warning('No difference detected to generate patch');
       return;
     }
     navigator.clipboard
       .writeText(diffResult.patch)
-      .then(() => message.success('Git Unified Patch copied to clipboard!'))
-      .catch(() => message.error('Failed to copy patch to clipboard'));
-  }, [diffResult.patch, diffResult.metrics, message]);
+      .then(() => message.success('Copied Git unified patch to clipboard!'))
+      .catch(() => message.error('Failed to copy patch'));
+  };
 
+  // Export .patch file
   const handleExportPatch = useCallback(() => {
-    if (diffResult.metrics.additions === 0 && diffResult.metrics.deletions === 0) {
-      message.info('No differences to export: files are identical');
+    if (!diffResult.patch || (diffResult.metrics.additions === 0 && diffResult.metrics.deletions === 0)) {
+      message.warning('No difference detected to generate patch');
       return;
     }
-    if (!diffResult.patch) {
-      message.info('No diff to export');
-      return;
-    }
-    const cleanMod = cleanFilename(modifiedFilename).replace(/\.[^/.]+$/, '');
-    const filename = `${cleanMod || 'changes'}.patch`;
-    downloadFile(diffResult.patch, filename, 'text/x-diff');
-    message.success(`Exported ${filename}`);
+    const filename = `${modifiedFilename.replace(/[^a-zA-Z0-9_-]/g, '_') || 'changes'}.patch`;
+    downloadFile(diffResult.patch, filename);
+    message.success(`Downloaded ${filename}`);
   }, [diffResult.patch, diffResult.metrics, modifiedFilename, message]);
 
   // Keyboard shortcuts
@@ -279,7 +260,7 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
         const searchInput = document.querySelector(
-          'input[placeholder^="Search in diff"]'
+          'input[placeholder^="Search"]'
         ) as HTMLInputElement;
         if (searchInput && document.activeElement !== searchInput) {
           e.preventDefault();
@@ -306,7 +287,19 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  });
+  }, [handleSwap, handlePrevDiffHunk, handleNextDiffHunk]);
+
+  const handleOriginalFilenameChange = (val: string) => {
+    setOriginalFilename(val);
+    const detected = detectLanguage(val);
+    if (detected !== 'plaintext') setLanguage(detected);
+  };
+
+  const handleModifiedFilenameChange = (val: string) => {
+    setModifiedFilename(val);
+    const detected = detectLanguage(val);
+    if (detected !== 'plaintext') setLanguage(detected);
+  };
 
   return (
     <div
@@ -317,7 +310,7 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
       <Header
         metrics={diffResult.metrics}
         isDarkMode={isDarkMode}
-        onToggleTheme={() => setIsDarkMode((prev) => !prev)}
+        onToggleTheme={() => setIsDarkMode(!isDarkMode)}
         onOpenHelp={() => setHelpOpen(true)}
       />
 
@@ -355,7 +348,7 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
         onExportPatch={handleExportPatch}
       />
 
-      <div className="flex-1 flex flex-col min-h-0 overflow-hidden pt-3">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden pt-2">
         {showInputs && (
           <Inputs
             originalText={originalText}
@@ -402,6 +395,8 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
               onMatchCountChange={setRenderedMatchCount}
               isDarkMode={isDarkMode}
               navRef={githubNavRef}
+              originalFilename={originalFilename}
+              modifiedFilename={modifiedFilename}
             />
           )}
         </div>
@@ -412,13 +407,14 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
   );
 }
 
-export default function App() {
+export function App() {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('gdw_dark_mode');
       if (saved !== null) return saved === 'true';
       return (
-        window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        window.matchMedia &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches
       );
     } catch {
       return false;
@@ -456,3 +452,4 @@ export default function App() {
     </ConfigProvider>
   );
 }
+export default App;

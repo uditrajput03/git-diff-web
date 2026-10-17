@@ -12,6 +12,17 @@ export interface DiffSample {
 
 export const DIFF_SAMPLES: DiffSample[] = [
   {
+    id: 'plaintext-intro',
+    name: 'Plain Text Quickstart',
+    category: 'Text',
+    description: 'A minimal single-line text comparison demonstrating live diffing',
+    language: 'plaintext',
+    originalFilename: 'original.txt',
+    modifiedFilename: 'modified.txt',
+    original: 'Welcome to Git Diff Web: paste or type original text here to compare changes.',
+    modified: 'Welcome to Git Diff Web: paste or edit modified text here to visualize differences.',
+  },
+  {
     id: 'typescript-refactor',
     name: 'TypeScript Refactor',
     category: 'Code',
@@ -99,51 +110,8 @@ export function formatPrice(amount: number, locale = 'en-US'): string {
     language: 'json',
     originalFilename: 'app-config.v1.json',
     modifiedFilename: 'app-config.v2.json',
-    original: `{
-  "appVersion": "1.4.0",
-  "environment": "production",
-  "server": {
-    "host": "api.legacy-internal.net",
-    "port": 8080,
-    "ssl": false,
-    "timeoutMs": 5000
-  },
-  "features": {
-    "betaDashboard": false,
-    "analyticsV2": false,
-    "ssoAuth": false
-  },
-  "rateLimit": {
-    "maxRequests": 100,
-    "windowSeconds": 60
-  }
-}
-`,
-    modified: `{
-  "appVersion": "2.0.0",
-  "environment": "production",
-  "server": {
-    "host": "api.cloud-gateway.io",
-    "port": 443,
-    "ssl": true,
-    "timeoutMs": 3000,
-    "retryPolicy": {
-      "maxRetries": 3,
-      "backoffMs": 250
-    }
-  },
-  "features": {
-    "betaDashboard": true,
-    "analyticsV2": true,
-    "ssoAuth": true,
-    "aiAssistant": true
-  },
-  "rateLimit": {
-    "maxRequests": 500,
-    "windowSeconds": 60
-  }
-}
-`,
+    original: `{\n  "appVersion": "1.4.0",\n  "environment": "production",\n  "server": {\n    "host": "api.legacy-internal.net",\n    "port": 8080,\n    "ssl": false,\n    "timeoutMs": 5000\n  },\n  "features": {\n    "betaDashboard": false,\n    "analyticsV2": false,\n    "ssoAuth": false\n  },\n  "rateLimit": {\n    "maxRequests": 100,\n    "windowSeconds": 60\n  }\n}\n`,
+    modified: `{\n  "appVersion": "2.0.0",\n  "environment": "production",\n  "server": {\n    "host": "api.cloud-gateway.io",\n    "port": 443,\n    "ssl": true,\n    "timeoutMs": 3000,\n    "retryPolicy": {\n      "maxRetries": 3,\n      "backoffMs": 250\n    }\n  },\n  "features": {\n    "betaDashboard": true,\n    "analyticsV2": true,\n    "ssoAuth": true,\n    "aiAssistant": true\n  },\n  "rateLimit": {\n    "maxRequests": 500,\n    "windowSeconds": 60\n  }\n}\n`,
   },
   {
     id: 'python-service',
@@ -153,61 +121,8 @@ export function formatPrice(amount: number, locale = 'en-US'): string {
     language: 'python',
     originalFilename: 'user_repository.py (Old)',
     modifiedFilename: 'user_repository.py (New)',
-    original: `import json
-import requests
-
-class UserRepository:
-    def __init__(self, base_url):
-        self.base_url = base_url
-
-    def get_user_by_id(self, user_id):
-        url = self.base_url + "/users/" + str(user_id)
-        resp = requests.get(url)
-        if resp.status_code == 200:
-            return resp.json()
-        return None
-
-    def update_user_status(self, user_id, active):
-        url = self.base_url + "/users/" + str(user_id)
-        payload = {"is_active": active}
-        resp = requests.patch(url, json=payload)
-        return resp.status_code == 200
-`,
-    modified: `import logging
-from functools import lru_cache
-from typing import Optional, Dict, Any
-import requests
-
-logger = logging.getLogger(__name__)
-
-class UserRepository:
-    def __init__(self, base_url: str, request_timeout: int = 5):
-        self.base_url = base_url.rstrip("/")
-        self.timeout = request_timeout
-
-    @lru_cache(maxsize=1024)
-    def get_user_by_id(self, user_id: int) -> Optional[Dict[str, Any]]:
-        url = f"{self.base_url}/api/v2/users/{user_id}"
-        try:
-            resp = requests.get(url, timeout=self.timeout)
-            resp.raise_for_status()
-            return resp.json()
-        except requests.RequestException as err:
-            logger.error("Failed to fetch user %s: %s", user_id, err)
-            return None
-
-    def update_user_status(self, user_id: int, active: bool) -> bool:
-        url = f"{self.base_url}/api/v2/users/{user_id}"
-        payload = {"is_active": active}
-        try:
-            resp = requests.patch(url, json=payload, timeout=self.timeout)
-            # Invalidate cache entry after mutation
-            self.get_user_by_id.cache_clear()
-            return resp.ok
-        except requests.RequestException as err:
-            logger.error("Failed to update status for user %s: %s", user_id, err)
-            return False
-`,
+    original: `import json\nimport requests\n\nclass UserRepository:\n    def __init__(self, base_url):\n        self.base_url = base_url\n\n    def get_user_by_id(self, user_id):\n        url = self.base_url + "/users/" + str(user_id)\n        resp = requests.get(url)\n        if resp.status_code == 200:\n            return resp.json()\n        return None\n\n    def update_user_status(self, user_id, active):\n        url = self.base_url + "/users/" + str(user_id)\n        payload = {"is_active": active}\n        resp = requests.patch(url, json=payload)\n        return resp.status_code == 200\n`,
+    modified: `import logging\nfrom functools import lru_cache\nfrom typing import Optional, Dict, Any\nimport requests\n\nlogger = logging.getLogger(__name__)\n\nclass UserRepository:\n    def __init__(self, base_url: str, request_timeout: int = 5):\n        self.base_url = base_url.rstrip("/")\n        self.timeout = request_timeout\n\n    @lru_cache(maxsize=1024)\n    def get_user_by_id(self, user_id: int) -> Optional[Dict[str, Any]]:\n        url = f"{self.base_url}/api/v2/users/{user_id}"\n        try:\n            resp = requests.get(url, timeout=self.timeout)\n            resp.raise_for_status()\n            return resp.json()\n        except requests.RequestException as err:\n            logger.error("Failed to fetch user %s: %s", user_id, err)\n            return None\n\n    def update_user_status(self, user_id: int, active: bool) -> bool:\n        url = f"{self.base_url}/api/v2/users/{user_id}"\n        payload = {"is_active": active}\n        try:\n            resp = requests.patch(url, json=payload, timeout=self.timeout)\n            # Invalidate cache entry after mutation\n            self.get_user_by_id.cache_clear()\n            return resp.ok\n        except requests.RequestException as err:\n            logger.error("Failed to update status for user %s: %s", user_id, err)\n            return False\n`,
   },
   {
     id: 'markdown-docs',
@@ -217,47 +132,7 @@ class UserRepository:
     language: 'markdown',
     originalFilename: 'README.md (v1.0)',
     modifiedFilename: 'README.md (v2.0)',
-    original: `# My Project
-
-Quick installation guide for local environment:
-
-## Prerequisites
-- Node.js 16.x or higher
-- Yarn package manager
-
-## Getting Started
-\`\`\`bash
-git clone https://github.com/example/repo.git
-cd repo
-yarn install
-yarn start
-\`\`\`
-
-Contact support at help@example.com for issues.
-`,
-    modified: `# My Modern Platform 🚀
-
-Enterprise-ready cloud developer workspace and analytics dashboard.
-
-## Prerequisites
-- Node.js 20 LTS or Node.js 22 LTS
-- pnpm 9.x (recommended) or npm 10+
-- Docker Desktop 4.25+ (for local microservices)
-
-## Getting Started
-\`\`\`bash
-# Clone the repository
-git clone https://github.com/example/repo.git
-cd repo
-
-# Install dependencies and start development server
-pnpm install
-pnpm dev
-\`\`\`
-
-## Community & Support
-- Join our [Discord Server](https://discord.gg/example)
-- Report bugs via [GitHub Issues](https://github.com/example/repo/issues)
-`,
+    original: `# My Project\n\nQuick installation guide for local environment:\n\n## Prerequisites\n- Node.js 16.x or higher\n- Yarn package manager\n\n## Getting Started\n\`\`\`bash\ngit clone https://github.com/example/repo.git\ncd repo\nyarn install\nyarn start\n\`\`\`\n\nContact support at help@example.com for issues.\n`,
+    modified: `# My Modern Platform 🚀\n\nEnterprise-ready cloud developer workspace and analytics dashboard.\n\n## Prerequisites\n- Node.js 20 LTS or Node.js 22 LTS\n- pnpm 9.x (recommended) or npm 10+\n- Docker Desktop 4.25+ (for local microservices)\n\n## Getting Started\n\`\`\`bash\n# Clone the repository\ngit clone https://github.com/example/repo.git\ncd repo\n\n# Install dependencies and start development server\npnpm install\npnpm dev\n\`\`\`\n\n## Community & Support\n- Join our [Discord Server](https://discord.gg/example)\n- Report bugs via [GitHub Issues](https://github.com/example/repo/issues)\n`,
   },
 ];
