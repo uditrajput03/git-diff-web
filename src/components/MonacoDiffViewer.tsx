@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import { DiffEditor, type DiffOnMount } from '@monaco-editor/react';
+import { DiffEditor, type DiffOnMount, type Monaco } from '@monaco-editor/react';
 import { Spin } from 'antd';
 
 interface MonacoDiffViewerProps {
@@ -18,6 +18,23 @@ interface MonacoDiffViewerProps {
   } | null>;
 }
 
+// Helper to patch model.setValue to prevent cursor jumping / reverse-order typing
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function patchModelSetValue(model: any) {
+  if (!model || model.__setValuePatched) return;
+  const origSetValue = model.setValue.bind(model);
+  model.setValue = function (newVal: string) {
+    // If model already contains the new value (e.g. user just typed it),
+    // do NOT call setValue because that resets cursor position to (1, 1),
+    // which causes subsequent keystrokes to be typed in reverse order.
+    if (this.getValue() === newVal) {
+      return;
+    }
+    origSetValue(newVal);
+  };
+  model.__setValuePatched = true;
+}
+
 export function MonacoDiffViewer({
   originalText,
   modifiedText,
@@ -32,25 +49,37 @@ export function MonacoDiffViewer({
 }: MonacoDiffViewerProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const diffEditorRef = useRef<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const navInstanceRef = useRef<any>(null);
 
-  const handleEditorMount: DiffOnMount = (editor, monaco) => {
+  const handleBeforeMount = (monaco: Monaco) => {
+    // Intercept model creation so every model has guarded setValue from the start
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const origCreateModel = monaco.editor.createModel.bind(monaco.editor) as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    monaco.editor.createModel = function (...args: any[]) {
+      const model = origCreateModel(...args);
+      patchModelSetValue(model);
+      return model;
+    };
+  };
+
+  const handleEditorMount: DiffOnMount = (editor) => {
     diffEditorRef.current = editor;
-
-    // Create diff navigator for Next/Previous hunk jumping
-    try {
-      navInstanceRef.current = monaco.editor.createDiffNavigator(editor, {
-        followsCaret: true,
-        ignoreCharChanges: false,
-      });
-    } catch {
-      // Ignore if navigator is not available
-    }
 
     // Two-way data binding when typing inside Monaco
     const originalEditor = editor.getOriginalEditor();
     const modifiedEditor = editor.getModifiedEditor();
+
+    // Patch initial models
+    patchModelSetValue(originalEditor.getModel());
+    patchModelSetValue(modifiedEditor.getModel());
+
+    // Patch any newly assigned models on model change
+    originalEditor.onDidChangeModel(() => {
+      patchModelSetValue(originalEditor.getModel());
+    });
+    modifiedEditor.onDidChangeModel(() => {
+      patchModelSetValue(modifiedEditor.getModel());
+    });
 
     originalEditor.onDidChangeModelContent(() => {
       const val = originalEditor.getValue();
@@ -67,23 +96,36 @@ export function MonacoDiffViewer({
     });
   };
 
-  // Expose next / previous change jumping
+  // Modern Monaco IDiffEditor goToDiff navigation for F7 / Next / Prev Diff
   useEffect(() => {
     if (navRef) {
       navRef.current = {
         nextDiff: () => {
-          if (navInstanceRef.current && navInstanceRef.current.canNavigate()) {
-            navInstanceRef.current.next();
+          if (diffEditorRef.current && typeof diffEditorRef.current.goToDiff === 'function') {
+            diffEditorRef.current.goToDiff('next');
           }
         },
         prevDiff: () => {
-          if (navInstanceRef.current && navInstanceRef.current.canNavigate()) {
-            navInstanceRef.current.previous();
+          if (diffEditorRef.current && typeof diffEditorRef.current.goToDiff === 'function') {
+            diffEditorRef.current.goToDiff('previous');
           }
         },
       };
     }
   }, [navRef]);
+
+  // Clean unmount to prevent "TextModel got disposed before DiffEditorWidget model got reset"
+  useEffect(() => {
+    return () => {
+      if (diffEditorRef.current) {
+        try {
+          diffEditorRef.current.setModel(null);
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, []);
 
   return (
     <div className="flex-1 w-full h-full min-h-0 relative overflow-hidden">
@@ -94,9 +136,10 @@ export function MonacoDiffViewer({
         theme={isDarkMode ? 'vs-dark' : 'light'}
         loading={
           <div className="flex items-center justify-center h-full w-full">
-            <Spin tip="Loading VS Code Diff Editor..." size="large" />
+            <Spin description="Loading VS Code Diff Editor..." size="large" />
           </div>
         }
+        beforeMount={handleBeforeMount}
         onMount={handleEditorMount}
         options={{
           renderSideBySide: viewMode === 'split',

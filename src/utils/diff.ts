@@ -52,6 +52,8 @@ export interface DiffOptions {
   ignoreWhitespace?: boolean;
   ignoreCase?: boolean;
   granularity?: Granularity;
+  originalFilename?: string;
+  modifiedFilename?: string;
 }
 
 export interface DiffResult {
@@ -116,13 +118,26 @@ export function computeIntraLineDiff(
 }
 
 /**
+ * Clean filename by removing parenthesized annotations (e.g. " (Before)", " (v1.0)")
+ */
+export function cleanFilename(name: string): string {
+  return name.replace(/\s*\([^)]*\)\s*$/, '').trim();
+}
+
+/**
  * Detect language identifier for Monaco Editor from filename
  */
 export function detectLanguage(filename: string): string {
-  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  const clean = cleanFilename(filename);
+  const parts = clean.split('.');
+  if (parts.length <= 1) return 'plaintext';
+  const ext = parts.pop()?.toLowerCase() || '';
+
   switch (ext) {
     case 'ts':
     case 'tsx':
+    case 'mts':
+    case 'cts':
       return 'typescript';
     case 'js':
     case 'jsx':
@@ -130,11 +145,14 @@ export function detectLanguage(filename: string): string {
     case 'cjs':
       return 'javascript';
     case 'json':
+    case 'jsonc':
       return 'json';
     case 'py':
+    case 'pyw':
       return 'python';
     case 'md':
     case 'markdown':
+    case 'mdown':
       return 'markdown';
     case 'css':
     case 'scss':
@@ -142,6 +160,8 @@ export function detectLanguage(filename: string): string {
       return 'css';
     case 'html':
     case 'htm':
+    case 'xml':
+    case 'svg':
       return 'html';
     case 'sql':
       return 'sql';
@@ -157,14 +177,19 @@ export function detectLanguage(filename: string): string {
     case 'go':
       return 'go';
     case 'java':
+    case 'kt':
+    case 'scala':
       return 'java';
     case 'cpp':
+    case 'cc':
+    case 'cxx':
     case 'c':
     case 'h':
     case 'hpp':
+    case 'cs':
       return 'cpp';
     default:
-      return 'typescript';
+      return 'plaintext';
   }
 }
 
@@ -177,7 +202,12 @@ export function computeDiff(
     ignoreWhitespace = false,
     ignoreCase = false,
     granularity = 'word',
+    originalFilename = 'original',
+    modifiedFilename = 'modified',
   } = options;
+
+  const origLines = originalText.split('\n');
+  const modLines = modifiedText.split('\n');
 
   const comparator = (a: string, b: string): boolean => {
     let left = a;
@@ -208,15 +238,15 @@ export function computeDiff(
     deletions: 0,
     unchanged: 0,
     modifications: 0,
-    totalOriginalLines: originalText ? originalText.split('\n').length : 0,
-    totalModifiedLines: modifiedText ? modifiedText.split('\n').length : 0,
+    totalOriginalLines: originalText ? origLines.length : 0,
+    totalModifiedLines: modifiedText ? modLines.length : 0,
   };
 
   let oldLn = 1;
   let newLn = 1;
   let lineCounter = 0;
 
-  // Track pending removed & added lines to pair them intelligently
+  // Track pending removed & added lines for monotonic alignment
   let pendingRemovedLines: DiffLine[] = [];
   let pendingAddedLines: DiffLine[] = [];
 
@@ -225,81 +255,110 @@ export function computeDiff(
       return;
     }
 
-    // Similarity-based alignment:
-    // If we have both removed and added lines, pair up lines that have similarity >= 0.25
-    const matchedAdded = new Set<number>();
-    const pairings: Array<{ removedIndex: number; addedIndex: number | null }> = [];
+    const R = pendingRemovedLines.length;
+    const A = pendingAddedLines.length;
 
-    for (let r = 0; r < pendingRemovedLines.length; r++) {
-      const remLine = pendingRemovedLines[r];
-      let bestAddedIdx = -1;
-      let highestSimilarity = 0;
+    // Build DP table for monotonic global sequence alignment with similarity
+    const dp = Array.from({ length: R + 1 }, () => new Float64Array(A + 1));
+    const sim = Array.from({ length: R }, (_, r) =>
+      Float64Array.from({ length: A }, (_, a) =>
+        computeLineSimilarity(pendingRemovedLines[r].content, pendingAddedLines[a].content)
+      )
+    );
 
-      for (let a = 0; a < pendingAddedLines.length; a++) {
-        if (matchedAdded.has(a)) continue;
-        const addLine = pendingAddedLines[a];
-        const sim = computeLineSimilarity(remLine.content, addLine.content);
-        if (sim > highestSimilarity && sim >= 0.25) {
-          highestSimilarity = sim;
-          bestAddedIdx = a;
+    for (let i = 1; i <= R; i++) {
+      for (let j = 1; j <= A; j++) {
+        let maxScore = Math.max(dp[i - 1][j], dp[i][j - 1]);
+        const s = sim[i - 1][j - 1];
+        if (s >= 0.25) {
+          maxScore = Math.max(maxScore, dp[i - 1][j - 1] + s);
         }
+        dp[i][j] = maxScore;
       }
+    }
 
-      if (bestAddedIdx !== -1) {
-        matchedAdded.add(bestAddedIdx);
-        pairings.push({ removedIndex: r, addedIndex: bestAddedIdx });
+    // Backtrack to find aligned operations in strict order
+    let i = R;
+    let j = A;
+    const steps: Array<
+      | { type: 'match'; rIdx: number; aIdx: number }
+      | { type: 'add'; aIdx: number }
+      | { type: 'remove'; rIdx: number }
+    > = [];
+
+    while (i > 0 || j > 0) {
+      if (
+        i > 0 &&
+        j > 0 &&
+        sim[i - 1][j - 1] >= 0.25 &&
+        Math.abs(dp[i][j] - (dp[i - 1][j - 1] + sim[i - 1][j - 1])) < 1e-6
+      ) {
+        steps.push({ type: 'match', rIdx: i - 1, aIdx: j - 1 });
+        i--;
+        j--;
+      } else if (j > 0 && Math.abs(dp[i][j] - dp[i][j - 1]) < 1e-6) {
+        steps.push({ type: 'add', aIdx: j - 1 });
+        j--;
       } else {
-        // Unmatched removed line (pure deletion)
-        pairings.push({ removedIndex: r, addedIndex: null });
+        steps.push({ type: 'remove', rIdx: i - 1 });
+        i--;
       }
     }
+    steps.reverse();
 
-    // Sort pairings by removed index, and insert matched pairs
-    for (const pair of pairings) {
-      const removed = pendingRemovedLines[pair.removedIndex];
-      const added = pair.addedIndex !== null ? pendingAddedLines[pair.addedIndex] : null;
-
-      if (added && granularity !== 'line') {
-        const intra = computeIntraLineDiff(
-          removed.content,
-          added.content,
-          granularity === 'char' ? 'char' : 'word'
-        );
-        removed.spans = intra.oldSpans;
-        added.spans = intra.newSpans;
+    for (const step of steps) {
+      if (step.type === 'match') {
+        const removed = pendingRemovedLines[step.rIdx];
+        const added = pendingAddedLines[step.aIdx];
         metrics.modifications++;
-      }
 
-      split.push({
-        id: `split-row-${lineCounter++}`,
-        left: {
-          lineNumber: removed.oldLineNumber,
-          content: removed.content,
-          type: 'removed',
-          spans: removed.spans,
-          isPlaceholder: false,
-        },
-        right: added
-          ? {
-              lineNumber: added.newLineNumber,
-              content: added.content,
-              type: 'added',
-              spans: added.spans,
-              isPlaceholder: false,
-            }
-          : {
-              lineNumber: null,
-              content: null,
-              type: 'empty',
-              isPlaceholder: true,
-            },
-      });
-    }
+        if (granularity !== 'line') {
+          const intra = computeIntraLineDiff(
+            removed.content,
+            added.content,
+            granularity === 'char' ? 'char' : 'word'
+          );
+          removed.spans = intra.oldSpans;
+          added.spans = intra.newSpans;
+        }
 
-    // Any remaining unmatched added lines are pure additions (rendered with left placeholder)
-    for (let a = 0; a < pendingAddedLines.length; a++) {
-      if (!matchedAdded.has(a)) {
-        const added = pendingAddedLines[a];
+        split.push({
+          id: `split-row-${lineCounter++}`,
+          left: {
+            lineNumber: removed.oldLineNumber,
+            content: removed.content,
+            type: 'removed',
+            spans: removed.spans,
+            isPlaceholder: false,
+          },
+          right: {
+            lineNumber: added.newLineNumber,
+            content: added.content,
+            type: 'added',
+            spans: added.spans,
+            isPlaceholder: false,
+          },
+        });
+      } else if (step.type === 'remove') {
+        const removed = pendingRemovedLines[step.rIdx];
+        split.push({
+          id: `split-row-${lineCounter++}`,
+          left: {
+            lineNumber: removed.oldLineNumber,
+            content: removed.content,
+            type: 'removed',
+            spans: removed.spans,
+            isPlaceholder: false,
+          },
+          right: {
+            lineNumber: null,
+            content: null,
+            type: 'empty',
+            isPlaceholder: true,
+          },
+        });
+      } else {
+        const added = pendingAddedLines[step.aIdx];
         split.push({
           id: `split-row-${lineCounter++}`,
           left: {
@@ -332,24 +391,28 @@ export function computeDiff(
     for (const line of lines) {
       if (change.added) {
         metrics.additions++;
+        // Use true content from modifiedText
+        const content = modLines[newLn - 1] ?? line;
         const diffLine: DiffLine = {
           id: `line-${lineCounter++}`,
           oldLineNumber: null,
           newLineNumber: newLn,
           type: 'added',
-          content: line,
+          content,
         };
         unified.push(diffLine);
         pendingAddedLines.push(diffLine);
         newLn++;
       } else if (change.removed) {
         metrics.deletions++;
+        // Use true content from originalText
+        const content = origLines[oldLn - 1] ?? line;
         const diffLine: DiffLine = {
           id: `line-${lineCounter++}`,
           oldLineNumber: oldLn,
           newLineNumber: null,
           type: 'removed',
-          content: line,
+          content,
         };
         unified.push(diffLine);
         pendingRemovedLines.push(diffLine);
@@ -357,25 +420,27 @@ export function computeDiff(
       } else {
         metrics.unchanged++;
         processPendingSplitLines();
+        const leftContent = origLines[oldLn - 1] ?? line;
+        const rightContent = modLines[newLn - 1] ?? line;
         const diffLine: DiffLine = {
           id: `line-${lineCounter++}`,
           oldLineNumber: oldLn,
           newLineNumber: newLn,
           type: 'unchanged',
-          content: line,
+          content: rightContent,
         };
         unified.push(diffLine);
         split.push({
           id: `split-row-${lineCounter++}`,
           left: {
             lineNumber: oldLn,
-            content: line,
+            content: leftContent,
             type: 'unchanged',
             isPlaceholder: false,
           },
           right: {
             lineNumber: newLn,
-            content: line,
+            content: rightContent,
             type: 'unchanged',
             isPlaceholder: false,
           },
@@ -388,15 +453,21 @@ export function computeDiff(
 
   processPendingSplitLines();
 
-  // Standard Git unified patch
-  const patch = createTwoFilesPatch(
-    'a/original',
-    'b/modified',
-    originalText,
-    modifiedText,
-    'original',
-    'modified'
-  );
+  // Standard Git unified patch with sanitized filenames
+  const cleanOrig = cleanFilename(originalFilename) || 'original';
+  const cleanMod = cleanFilename(modifiedFilename) || 'modified';
+
+  let patch = '';
+  if (metrics.additions > 0 || metrics.deletions > 0) {
+    patch = createTwoFilesPatch(
+      `a/${cleanOrig}`,
+      `b/${cleanMod}`,
+      originalText,
+      modifiedText,
+      cleanOrig,
+      cleanMod
+    );
+  }
 
   return { unified, split, metrics, patch };
 }

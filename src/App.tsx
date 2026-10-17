@@ -1,15 +1,16 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { ConfigProvider, theme, message, App as AntdApp } from 'antd';
+import { ConfigProvider, theme, App as AntdApp } from 'antd';
 import { Header } from './components/Header';
 import { Toolbar, type DiffEngine } from './components/Toolbar';
 import { Inputs } from './components/Inputs';
-import { DiffOutput } from './components/DiffOutput';
+import { DiffOutput, type DiffOutputNavHandle } from './components/DiffOutput';
 import { MonacoDiffViewer } from './components/MonacoDiffViewer';
 import { HelpModal } from './components/HelpModal';
 import {
   computeDiff,
   downloadFile,
   detectLanguage,
+  cleanFilename,
   type DiffResult,
   type Granularity,
 } from './utils/diff';
@@ -29,6 +30,8 @@ interface MainAppProps {
 }
 
 function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
+  const { message } = AntdApp.useApp();
+
   const [originalText, setOriginalText] = useState<string>(() =>
     getSaved('gdw_original', DIFF_SAMPLES[0].original)
   );
@@ -74,13 +77,21 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+  const [renderedMatchCount, setRenderedMatchCount] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
 
-  // Reference for Monaco diff hunk navigation
+  // References for Diff hunk navigation
   const monacoNavRef = useRef<{
     nextDiff: () => void;
     prevDiff: () => void;
   } | null>(null);
+
+  const githubNavRef = useRef<DiffOutputNavHandle | null>(null);
+
+  // Reset match index when query changes
+  useEffect(() => {
+    setCurrentMatchIndex(0);
+  }, [searchQuery]);
 
   // Persistence
   useEffect(() => {
@@ -125,7 +136,7 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
     const timer = setTimeout(() => {
       setDebouncedOriginal(originalText);
       setDebouncedModified(modifiedText);
-    }, 150);
+    }, 120);
     return () => clearTimeout(timer);
   }, [originalText, modifiedText]);
 
@@ -134,11 +145,21 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
       ignoreWhitespace,
       ignoreCase,
       granularity,
+      originalFilename,
+      modifiedFilename,
     });
-  }, [debouncedOriginal, debouncedModified, ignoreWhitespace, ignoreCase, granularity]);
+  }, [
+    debouncedOriginal,
+    debouncedModified,
+    ignoreWhitespace,
+    ignoreCase,
+    granularity,
+    originalFilename,
+    modifiedFilename,
+  ]);
 
-  // Search match count
-  const searchMatchCount = useMemo(() => {
+  // Calculate search match count for unified diff / Monaco
+  const calculatedMatchCount = useMemo(() => {
     if (!searchQuery.trim()) return 0;
     const q = searchQuery.trim().toLowerCase();
     let count = 0;
@@ -153,29 +174,32 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
     return count;
   }, [searchQuery, diffResult.unified]);
 
+  const effectiveMatchCount =
+    diffEngine === 'github' ? renderedMatchCount : calculatedMatchCount;
+
   const handleNextMatch = () => {
-    if (searchMatchCount === 0) return;
-    setCurrentMatchIndex((prev) => (prev + 1) % searchMatchCount);
+    if (effectiveMatchCount === 0) return;
+    setCurrentMatchIndex((prev) => (prev + 1) % effectiveMatchCount);
   };
 
   const handlePrevMatch = () => {
-    if (searchMatchCount === 0) return;
-    setCurrentMatchIndex((prev) => (prev - 1 + searchMatchCount) % searchMatchCount);
+    if (effectiveMatchCount === 0) return;
+    setCurrentMatchIndex((prev) => (prev - 1 + effectiveMatchCount) % effectiveMatchCount);
   };
 
   const handleNextDiffHunk = () => {
     if (diffEngine === 'monaco' && monacoNavRef.current) {
       monacoNavRef.current.nextDiff();
-    } else {
-      handleNextMatch();
+    } else if (diffEngine === 'github' && githubNavRef.current) {
+      githubNavRef.current.nextDiff();
     }
   };
 
   const handlePrevDiffHunk = () => {
     if (diffEngine === 'monaco' && monacoNavRef.current) {
       monacoNavRef.current.prevDiff();
-    } else {
-      handlePrevMatch();
+    } else if (diffEngine === 'github' && githubNavRef.current) {
+      githubNavRef.current.prevDiff();
     }
   };
 
@@ -185,7 +209,7 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
     setOriginalFilename(modifiedFilename);
     setModifiedFilename(originalFilename);
     message.success('Swapped Original and Modified inputs');
-  }, [originalText, modifiedText, originalFilename, modifiedFilename]);
+  }, [originalText, modifiedText, originalFilename, modifiedFilename, message]);
 
   const handleClear = useCallback(() => {
     setOriginalText('');
@@ -193,7 +217,7 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
     setOriginalFilename('original.txt');
     setModifiedFilename('modified.txt');
     message.info('Cleared both inputs');
-  }, []);
+  }, [message]);
 
   const handleSelectSample = useCallback((sample: DiffSample) => {
     setOriginalText(sample.original);
@@ -202,7 +226,7 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
     setModifiedFilename(sample.modifiedFilename);
     setLanguage(sample.language);
     message.success(`Loaded sample: ${sample.name}`);
-  }, []);
+  }, [message]);
 
   const handleOriginalFilenameChange = (name: string) => {
     setOriginalFilename(name);
@@ -221,6 +245,10 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
   };
 
   const handleCopyPatch = useCallback(() => {
+    if (diffResult.metrics.additions === 0 && diffResult.metrics.deletions === 0) {
+      message.info('No differences to copy: files are identical');
+      return;
+    }
     if (!diffResult.patch) {
       message.info('No diff to copy');
       return;
@@ -229,16 +257,22 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
       .writeText(diffResult.patch)
       .then(() => message.success('Git Unified Patch copied to clipboard!'))
       .catch(() => message.error('Failed to copy patch to clipboard'));
-  }, [diffResult.patch]);
+  }, [diffResult.patch, diffResult.metrics, message]);
 
   const handleExportPatch = useCallback(() => {
+    if (diffResult.metrics.additions === 0 && diffResult.metrics.deletions === 0) {
+      message.info('No differences to export: files are identical');
+      return;
+    }
     if (!diffResult.patch) {
       message.info('No diff to export');
       return;
     }
-    downloadFile(diffResult.patch, 'changes.patch', 'text/x-diff');
-    message.success('Exported changes.patch');
-  }, [diffResult.patch]);
+    const cleanMod = cleanFilename(modifiedFilename).replace(/\.[^/.]+$/, '');
+    const filename = `${cleanMod || 'changes'}.patch`;
+    downloadFile(diffResult.patch, filename, 'text/x-diff');
+    message.success(`Exported ${filename}`);
+  }, [diffResult.patch, diffResult.metrics, modifiedFilename, message]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -272,7 +306,7 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSwap]);
+  });
 
   return (
     <div
@@ -283,7 +317,7 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
       <Header
         metrics={diffResult.metrics}
         isDarkMode={isDarkMode}
-        onToggleTheme={() => setIsDarkMode(!isDarkMode)}
+        onToggleTheme={() => setIsDarkMode((prev) => !prev)}
         onOpenHelp={() => setHelpOpen(true)}
       />
 
@@ -308,7 +342,7 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
         setShowInputs={setShowInputs}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
-        searchMatchCount={searchMatchCount}
+        searchMatchCount={effectiveMatchCount}
         currentMatchIndex={currentMatchIndex}
         onNextMatch={handleNextMatch}
         onPrevMatch={handlePrevMatch}
@@ -321,49 +355,56 @@ function MainApp({ isDarkMode, setIsDarkMode }: MainAppProps) {
         onExportPatch={handleExportPatch}
       />
 
-      <div className="flex flex-col flex-1 overflow-hidden min-h-0">
-        <Inputs
-          originalText={originalText}
-          setOriginalText={setOriginalText}
-          originalFilename={originalFilename}
-          setOriginalFilename={handleOriginalFilenameChange}
-          modifiedText={modifiedText}
-          setModifiedText={setModifiedText}
-          modifiedFilename={modifiedFilename}
-          setModifiedFilename={handleModifiedFilenameChange}
-          showInputs={showInputs}
-        />
-
-        {diffEngine === 'monaco' ? (
-          <div className="flex-1 w-full h-full min-h-0 p-3 pt-1">
-            <div
-              className="w-full h-full rounded-lg overflow-hidden border shadow-sm"
-              style={{ borderColor: isDarkMode ? '#30363d' : '#d0d7de' }}
-            >
-              <MonacoDiffViewer
-                originalText={originalText}
-                modifiedText={modifiedText}
-                onOriginalChange={setOriginalText}
-                onModifiedChange={setModifiedText}
-                language={language}
-                viewMode={viewMode}
-                ignoreWhitespace={ignoreWhitespace}
-                wordWrap={wordWrap}
-                isDarkMode={isDarkMode}
-                navRef={monacoNavRef}
-              />
-            </div>
-          </div>
-        ) : (
-          <DiffOutput
-            diff={diffResult}
-            viewMode={viewMode}
-            wordWrap={wordWrap}
-            foldUnchanged={foldUnchanged}
-            searchQuery={searchQuery}
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden pt-3">
+        {showInputs && (
+          <Inputs
+            originalText={originalText}
+            modifiedText={modifiedText}
+            setOriginalText={setOriginalText}
+            setModifiedText={setModifiedText}
+            originalFilename={originalFilename}
+            modifiedFilename={modifiedFilename}
+            setOriginalFilename={handleOriginalFilenameChange}
+            setModifiedFilename={handleModifiedFilenameChange}
             isDarkMode={isDarkMode}
           />
         )}
+
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          {diffEngine === 'monaco' ? (
+            <div className="flex-1 w-full h-full min-h-0 px-4 pb-3">
+              <div
+                className="w-full h-full rounded-lg overflow-hidden border shadow-sm"
+                style={{ borderColor: isDarkMode ? '#30363d' : '#d0d7de' }}
+              >
+                <MonacoDiffViewer
+                  originalText={originalText}
+                  modifiedText={modifiedText}
+                  onOriginalChange={setOriginalText}
+                  onModifiedChange={setModifiedText}
+                  language={language}
+                  viewMode={viewMode}
+                  ignoreWhitespace={ignoreWhitespace}
+                  wordWrap={wordWrap}
+                  isDarkMode={isDarkMode}
+                  navRef={monacoNavRef}
+                />
+              </div>
+            </div>
+          ) : (
+            <DiffOutput
+              diff={diffResult}
+              viewMode={viewMode}
+              wordWrap={wordWrap}
+              foldUnchanged={foldUnchanged}
+              searchQuery={searchQuery}
+              currentMatchIndex={currentMatchIndex}
+              onMatchCountChange={setRenderedMatchCount}
+              isDarkMode={isDarkMode}
+              navRef={githubNavRef}
+            />
+          )}
+        </div>
       </div>
 
       <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
@@ -376,7 +417,9 @@ export default function App() {
     try {
       const saved = localStorage.getItem('gdw_dark_mode');
       if (saved !== null) return saved === 'true';
-      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      return (
+        window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+      );
     } catch {
       return false;
     }
@@ -387,6 +430,11 @@ export default function App() {
       localStorage.setItem('gdw_dark_mode', String(isDarkMode));
     } catch {
       // Ignore quota errors
+    }
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
 
